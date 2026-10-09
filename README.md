@@ -1,0 +1,170 @@
+# CineNotch
+
+Safari's Picture in Picture video, living in an island at the top of the screen instead of
+floating over your work. In the notch on MacBooks that have one, in a drawn pill in the menu
+bar everywhere else.
+
+![The video tucked into the notch, and sliding out after a glance at the camera](docs/screenshot.png)
+
+- **Collapsed:** a black pill with a live thumbnail, the video title and a progress ring. Audio keeps playing.
+- **Hover the pill:** the video slides out below it at full size, with play/pause, ±10 s,
+  back-to-Safari and close buttons.
+- **Move the cursor away:** it tucks back in.
+- **Or just glance at the camera** (experimental): the island leans out and the mascot's eyes
+  open while the glance builds up, then the video slides out, stays while you watch it, and
+  tucks back in when you look back at your work.
+- **Pause When the Island Closes** (off by default, in the menu and Settings → General): the
+  video plays only while the island is open. It pauses when the island tucks in and plays again
+  when it opens; a video you paused yourself stays paused.
+
+The island grows out of the notch when Picture in Picture starts and tucks back into it when
+it ends; a soft glow in the video's colors sits under the open island (Settings → General).
+
+Status: MVP. Safari only, one screen. There is no signed download yet, so for now CineNotch
+is built from source.
+
+## Requirements
+
+- macOS 14 or later
+- Swift 5.9+ (Xcode or just the Command Line Tools)
+
+## Build and run
+
+```bash
+./scripts/make-dev-cert.sh   # once: local signing identity, keeps permissions across rebuilds
+./scripts/run.sh             # build build/CineNotch.app and (re)start it
+```
+
+On first launch a short onboarding asks for two permissions:
+
+- **Accessibility**: to find the PiP window, tuck it away and press its buttons.
+- **Screen Recording**: to show the PiP video in the island. Only the PiP window is captured,
+  and nothing leaves the Mac. macOS applies this permission after the app restarts.
+
+Then start Picture in Picture on any video in Safari.
+
+### Reveal by looking at the camera
+
+Menu bar icon → **Calibrate…**, follow the targets (about 50 s), then turn on
+**Reveal the Video** (or Settings → Gaze). macOS asks for camera access the first time.
+**Sensitivity** trades accidental reveals (strict) against glances that need repeating
+(sensitive). Settings → Gaze shows what the camera sees and where it thinks you look. It adapts to how you sit from your mouse clicks, so it gets steadier after a
+minute of normal use.
+
+The camera runs only while a PiP video is docked and gaze reveal is on, so the green camera
+light is on during that time. Frames are analyzed in memory and never stored or sent anywhere.
+
+## How it works
+
+The PiP window belongs to the system process `PIPAgent`. CineNotch:
+
+1. Finds it through the Accessibility API, resizes it to the island's video size, and parks
+   it in the bottom-right corner of the screen so that only its transparent, rounded top-left
+   pixel stays on screen. PIPAgent refuses positions that are fully off screen, and a hidden
+   window can't be captured, so the window has to stay technically visible.
+2. Streams that window with ScreenCaptureKit into the island. The stream stays open all the
+   time (starting one takes about 250 ms): 10 fps for the thumbnail, 60 fps while expanded.
+3. Reads the progress (`AXValueDescription` of the scrubber, e.g. "33%") and play state from
+   the PiP window's accessibility tree, and presses its buttons for the controls.
+4. Takes the title from the active Safari tab at the moment PiP starts.
+
+On quit (including `SIGTERM`), the PiP window is put back where it was. If CineNotch
+crashes, the PiP window stays in the corner; relaunch CineNotch or close PiP from Safari.
+
+### Gaze
+
+Vision finds the face and eye landmarks in the camera feed (15 fps; full face detection every
+5th frame, the face box follows the landmarks in between). Each eye is cut out along the line
+between the eyes, scaled to 20×10 and brightness-normalized; with 13 head-pose numbers (where
+the nose, mouth, chin and brows sit relative to the eyes, Vision's pitch/yaw, head position)
+that makes the frame's feature vector. A per-user ridge regression maps it to a point on the
+screen; the regularization (with a lighter penalty for the head-pose part) is picked by
+cross-validation over calibration steps.
+
+Calibration (~50 s) walks the eyes over the screen, into the camera lens, across the video,
+and over traps right under the pill, partly while moving the head, so the model learns that
+head movement alone doesn't move the gaze.
+
+Live, frames where the landmarks glitch or the eyes blink are dropped, predictions go through a
+median of three and a One Euro filter, and decisions are votes: 70% of the last 0.35 s in the
+camera zone reveals (85% of 0.6 s while you type, click or scroll), 75% of the last 0.8 s
+elsewhere collapses; the pill glows while a glance builds up. People look at what they click,
+so every click tells where the user really looked: the median gap between clicks and
+predictions over the last ten clicks corrects posture drift. How far the camera zone reaches
+down is the **Gaze Sensitivity** setting (strict, balanced, sensitive).
+
+**Test Gaze Engines…** (menu bar icon with ⌥ held, like the other developer items) records a ~40-second follow-the-dot session (with two clicks, camera →
+video → elsewhere sequences and the usual traps) and scores the engine on it: zone accuracy,
+reveals and their latency, collapses, false reveals, whether the video stays open while you
+watch it. Recordings stay in `~/Library/Application Support/CineNotch/gaze-tests/`;
+`--evaluate-gaze` re-scores on all of them. Engines live in `Sources/CineNotch/Gaze/Engines`: a
+new idea goes in as another engine next to the current one and is compared on the same frames.
+
+### What we tried
+
+The current engine is v8. On recorded tests (8 sessions, 24 camera glances) it made 5
+user-visible mistakes in strict mode, against 11–23 for the earlier versions:
+
+- **Pupil points from Vision** (v0) barely move when only the eyes move; eye pixels do.
+- **A camera boundary derived from calibration** (v1–v4) kept landing wrong: halfway to the
+  video it sat right on the browser tabs under the pill (every false reveal happened there);
+  between camera and those traps, it relied on held-out estimates that are skewed with only a
+  few camera steps. Hence the sensitivity setting.
+- **A dedicated camera classifier** (v3) told "elsewhere" apart best but missed glances for the
+  same skewed-threshold reason.
+- **A pretrained gaze network** ([yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation),
+  L2CS-style, v5–v7) gave steadier raw angles but separated the video from the rest of the
+  screen worse, cost a quarter of a CPU core more, and is trained on data licensed for
+  non-commercial use only.
+- **Posture drift** was the biggest problem of all: within 15 minutes of calibrating, every
+  engine without drift correction had its whole picture shifted by 0.1–0.7 screen heights and
+  stopped working. Correcting from clicks fixed that for every model; with it, the eye-pixel
+  model came out ahead.
+
+## Developer flags
+
+Hold ⌥ while opening the menu bar icon for the developer items: the gaze debug panel, the gaze
+engine test, and the logs folder.
+
+```bash
+./scripts/run.sh --debug-fake-pip                 # a drawn video instead of Safari's, no PiP needed
+./scripts/run.sh --debug-slow-motion              # island animations at a fifth of their speed
+./scripts/run.sh --debug-notch                    # notch layout on a Mac without a notch
+./scripts/run.sh --debug-cycle                    # expand/collapse every 3 s, no mouse needed
+./scripts/run.sh --debug-snapshots /tmp/cinenotch  # save screenshots around every state change
+./scripts/run.sh --debug-island-png /tmp/island   # pictures of the island window alone (timed frames with slow motion)
+./scripts/run.sh --debug-windows /tmp/windows     # pictures of each onboarding step and Settings tab
+./scripts/run.sh --debug-overlay /tmp/overlay     # pictures of the calibration screens
+./scripts/run.sh --debug-gaze                     # open the gaze debug panel on launch
+./scripts/run.sh --evaluate-gaze                  # score gaze engines on all recorded tests, then quit
+```
+
+The app icon is drawn by `swift scripts/make-icon.swift`, which writes `Resources/AppIcon.icns`.
+
+Logs: `~/Library/Logs/CineNotch.log`. While the gaze debug panel is open, every analyzed frame
+goes to `~/Library/Logs/CineNotch-gaze.csv`. Calibration samples are kept in
+`~/Library/Application Support/CineNotch/gaze-calibration.json`.
+
+## Known limitations
+
+- The title is the active Safari tab's title when PiP starts. It doesn't update when the
+  next video autoplays, and is wrong if PiP was started from a background tab.
+- Progress has 1% resolution (that's all PiP exposes) and there is no time readout.
+- DRM-protected video (Netflix, Apple TV+) is captured as black.
+- On Macs without a notch the 300 pt pill can cover menu bar items near the center.
+- Gaze reveal costs about a third of a CPU core while the camera runs (Vision at 15 fps). Click
+  correction follows posture changes, but a very different setup (another chair, an external
+  monitor) still calls for recalibrating.
+
+## Roadmap
+
+- External displays
+- Other browsers (Chrome and Firefox draw PiP themselves, without PIPAgent)
+
+## License
+
+CineNotch is free software under the [GNU General Public License v3.0](LICENSE).
+Copyright © 2026 Nikita Verba.
+
+The license doesn't cover the CineNotch name and app icon: if you publish a fork, please give it
+its own name and icon.
