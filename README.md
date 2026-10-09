@@ -1,24 +1,36 @@
 # CineNotch
 
-Safari's Picture in Picture video, living in an island at the top of the screen instead of
-floating over your work. In the notch on MacBooks that have one, in a drawn pill in the menu
-bar everywhere else.
+**Glance at your camera and the video slides out of the notch. Look back at your work and it
+tucks away.**
+
+CineNotch docks Safari's Picture in Picture video into the notch (or a drawn pill in the menu
+bar on Macs without one) instead of letting it float over your work. You don't reach for the
+mouse to watch it: a glance is enough.
 
 ![The video tucked into the notch, and sliding out after a glance at the camera](docs/screenshot.png)
 
-- **Collapsed:** a black pill with a live thumbnail, the video title and a progress ring. Audio keeps playing.
-- **Hover the pill:** the video slides out below it at full size, with play/pause, ±10 s,
-  back-to-Safari and close buttons.
-- **Move the cursor away:** it tucks back in.
-- **Or just glance at the camera** (experimental): the island leans out and the mascot's eyes
-  open while the glance builds up, then the video slides out, stays while you watch it, and
-  tucks back in when you look back at your work.
+## Open it with a glance
+
+- **Glance at the camera.** The island leans out and the mascot's eyes open while the glance
+  builds up, then the video slides out at full size.
+- **Keep watching.** It stays open while your eyes are on the video.
+- **Look back at your work.** It tucks back into the notch, and the audio keeps playing.
+
+A 50-second calibration learns your eyes, and your clicks keep it tuned to how you sit, so it
+gets steadier after a minute of normal use. Frames are analyzed on your Mac, never stored or
+sent anywhere, and the camera is on only while a video is docked.
+
+Prefer the mouse? Hover the island to open it, move the cursor away to close it.
+
+## Also
+
+- **Collapsed:** a black pill with a live thumbnail, the video title and a progress ring.
+- **Open:** the video at full size with play/pause, ±10 s, back-to-Safari and close buttons.
 - **Pause When the Island Closes** (off by default, in the menu and Settings → General): the
   video plays only while the island is open. It pauses when the island tucks in and plays again
   when it opens; a video you paused yourself stays paused.
-
-The island grows out of the notch when Picture in Picture starts and tucks back into it when
-it ends; a soft glow in the video's colors sits under the open island (Settings → General).
+- The island grows out of the notch when Picture in Picture starts and tucks back into it when
+  it ends; a soft glow in the video's colors sits under the open island (Settings → General).
 
 Status: MVP. Safari only, one screen. There is no signed download yet, so for now CineNotch
 is built from source.
@@ -43,16 +55,16 @@ On first launch a short onboarding asks for two permissions:
 
 Then start Picture in Picture on any video in Safari.
 
-### Reveal by looking at the camera
+### Turn on the glance
 
-Menu bar icon → **Calibrate…**, follow the targets (about 50 s), then turn on
-**Reveal the Video** (or Settings → Gaze). macOS asks for camera access the first time.
+Menu bar icon → **Reveal the Video** (or Settings → Gaze). The first time, macOS asks for
+camera access and CineNotch walks you through the calibration: follow the targets for about
+50 s. **Recalibrate…** is in Settings → Gaze.
 **Sensitivity** trades accidental reveals (strict) against glances that need repeating
-(sensitive). Settings → Gaze shows what the camera sees and where it thinks you look. It adapts to how you sit from your mouse clicks, so it gets steadier after a
-minute of normal use.
+(sensitive). Settings → Gaze shows what the camera sees and where it thinks you look.
 
-The camera runs only while a PiP video is docked and gaze reveal is on, so the green camera
-light is on during that time. Frames are analyzed in memory and never stored or sent anywhere.
+The camera runs only while a PiP video is docked and the glance is on, so the green camera
+light is on during that time.
 
 ## How it works
 
@@ -91,7 +103,7 @@ camera zone reveals (85% of 0.6 s while you type, click or scroll), 75% of the l
 elsewhere collapses; the pill glows while a glance builds up. People look at what they click,
 so every click tells where the user really looked: the median gap between clicks and
 predictions over the last ten clicks corrects posture drift. How far the camera zone reaches
-down is the **Gaze Sensitivity** setting (strict, balanced, sensitive).
+down is the **Sensitivity** setting (strict, balanced, sensitive).
 
 **Test Gaze Engines…** (menu bar icon with ⌥ held, like the other developer items) records a ~40-second follow-the-dot session (with two clicks, camera →
 video → elsewhere sequences and the usual traps) and scores the engine on it: zone accuracy,
