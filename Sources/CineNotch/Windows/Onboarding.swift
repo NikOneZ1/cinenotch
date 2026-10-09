@@ -167,6 +167,10 @@ private struct WelcomeStep: View {
                 Text(hasNotch ? "Your video, tucked into the notch" : "Your video, tucked into the menu bar")
                     .font(Theme.display(28))
                     .multilineTextAlignment(.center)
+                    // The menu bar version is a little wider than the window; it shrinks rather
+                    // than losing its last word (the steps below leave no room for two lines).
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Text("CineNotch moves the Picture in Picture video from Safari or Chrome into a little island at the top of your screen. Hover it, or just glance at the camera, and the video slides out.")
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
