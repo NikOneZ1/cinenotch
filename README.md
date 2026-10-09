@@ -3,8 +3,8 @@
 **Glance at your camera and the video slides out of the notch. Look back at your work and it
 tucks away.**
 
-CineNotch docks Safari's Picture in Picture video into the notch (or a drawn pill in the menu
-bar on Macs without one) instead of letting it float over your work. You don't reach for the
+CineNotch docks the Picture in Picture video from Safari or Chrome into the notch (or a drawn
+pill in the menu bar on Macs without one) instead of letting it float over your work. You don't reach for the
 mouse to watch it: a glance is enough.
 
 ![The video tucked into the notch, and sliding out after a glance at the camera](docs/screenshot.png)
@@ -25,14 +25,15 @@ Prefer the mouse? Hover the island to open it, move the cursor away to close it.
 ## Also
 
 - **Collapsed:** a black pill with a live thumbnail, the video title and a progress ring.
-- **Open:** the video at full size with play/pause, ±10 s, back-to-Safari and close buttons.
+- **Open:** the video at full size with play/pause, ±10 s, back-to-the-browser and close
+  buttons (no close for Chrome's video).
 - **Pause When the Island Closes** (off by default, in the menu and Settings → General): the
   video plays only while the island is open. It pauses when the island tucks in and plays again
   when it opens; a video you paused yourself stays paused.
 - The island grows out of the notch when Picture in Picture starts and tucks back into it when
   it ends; a soft glow in the video's colors sits under the open island (Settings → General).
 
-Status: MVP. Safari only, one screen. There is no signed download yet, so for now CineNotch
+Status: MVP. Safari and Chrome, one screen. There is no signed download yet, so for now CineNotch
 is built from source.
 
 ## Requirements
@@ -53,7 +54,7 @@ On first launch a short onboarding asks for two permissions:
 - **Screen Recording**: to show the PiP video in the island. Only the PiP window is captured,
   and nothing leaves the Mac. macOS applies this permission after the app restarts.
 
-Then start Picture in Picture on any video in Safari.
+Then start Picture in Picture on any video in Safari or Chrome.
 
 ### Turn on the glance
 
@@ -68,7 +69,7 @@ light is on during that time.
 
 ## How it works
 
-The PiP window belongs to the system process `PIPAgent`. CineNotch:
+Safari's PiP window belongs to the system process `PIPAgent`. CineNotch:
 
 1. Finds it through the Accessibility API, resizes it to the island's video size, and parks
    it in the bottom-right corner of the screen so that only its transparent, rounded top-left
@@ -82,6 +83,25 @@ The PiP window belongs to the system process `PIPAgent`. CineNotch:
 
 On quit (including `SIGTERM`), the PiP window is put back where it was. If CineNotch
 crashes, the PiP window stays in the corner; relaunch CineNotch or close PiP from Safari.
+
+### Chrome
+
+Chrome draws its own PiP window: a floating window of the browser process. CineNotch finds it
+through the Accessibility API too (Chrome turns its accessibility tree on when asked, as it does
+for screen readers), parks and streams it the same way, and takes the title from the tab Chrome
+marks as "Video playing in picture-in-picture mode", so it follows the next video in that tab.
+Chrome keeps its window inside the screen while resizing, so the window is resized at the top
+left before it's parked. Unlike the system window, it stays on the desktop (Space) it was opened
+on; CineNotch keeps it docked when you switch desktops.
+
+Chrome's own buttons exist only under the real cursor, so the controls go through macOS's Now
+Playing instead, where Chrome publishes the video: play state, position, play/pause and seeking.
+Since macOS 15.4, Now Playing (the private MediaRemote framework) only answers Apple's own
+processes. CineNotch does what other Mac media apps do
+([mediaremote-adapter](https://github.com/ungive/mediaremote-adapter)): it loads a small library,
+`Sources/NowPlayingBridge`, into `/usr/bin/perl`, which macOS still answers, and talks to it over
+stdin/stdout while a Chrome video is docked. The controls show only while Now Playing is about
+the docked video (same title), since another tab may be playing music.
 
 ### Gaze
 
@@ -161,6 +181,12 @@ goes to `~/Library/Logs/CineNotch-gaze.csv`. Calibration samples are kept in
 
 - The title is the active Safari tab's title when PiP starts. It doesn't update when the
   next video autoplays, and is wrong if PiP was started from a background tab.
+- Chrome's video can't be closed from the island: back-to-the-browser only shows its tab.
+- If CineNotch starts while Chrome's PiP window is on another desktop, it picks the window up
+  only once you switch to that desktop.
+- Chrome's play/pause, ±10 s and progress rely on the Now Playing workaround above. If a macOS
+  update closes it, they disappear and the video stays in the island without them. They also
+  hide while Now Playing names another video than the tab (for example, music in another tab).
 - Progress has 1% resolution (that's all PiP exposes) and there is no time readout.
 - DRM-protected video (Netflix, Apple TV+) is captured as black.
 - On Macs without a notch the 300 pt pill can cover menu bar items near the center.
@@ -171,7 +197,8 @@ goes to `~/Library/Logs/CineNotch-gaze.csv`. Calibration samples are kept in
 ## Roadmap
 
 - External displays
-- Other browsers (Chrome and Firefox draw PiP themselves, without PIPAgent)
+- Other browsers: Arc, Edge, Brave and Firefox draw their own PiP windows too (the Chromium
+  ones probably work like Chrome)
 
 ## License
 

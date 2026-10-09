@@ -14,6 +14,8 @@ final class PiPCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked S
     @MainActor private var size: CGSize = .zero
     @MainActor private var fast = false
     @MainActor private var generation = 0
+    /// Frames since the stream started; logged once, to tell a live window from a frozen one.
+    @MainActor private var frameCount = 0
     private let queue = DispatchQueue(label: "com.cinenotch.capture", qos: .userInteractive)
 
     @MainActor func start(windowID: CGWindowID, size: CGSize) {
@@ -37,7 +39,12 @@ final class PiPCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked S
                     return
                 }
                 self.stream = stream
+                frameCount = 0
                 Log.info("capture started for window \(windowID)")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                    guard let self, gen == self.generation else { return }
+                    Log.info("capture: \(self.frameCount) frames in the first 5 s")
+                }
             } catch {
                 Log.info("capture failed: \(error.localizedDescription)")
                 if gen == generation { isRunning = false }
@@ -94,7 +101,10 @@ final class PiPCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked S
               let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
               let surface = CVPixelBufferGetIOSurface(pixelBuffer)?.takeUnretainedValue() else { return }
         DispatchQueue.main.async { [weak self] in
-            MainActor.assumeIsolated { self?.onFrame?(surface) }
+            MainActor.assumeIsolated {
+                self?.frameCount += 1
+                self?.onFrame?(surface)
+            }
         }
     }
 

@@ -114,7 +114,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         if !Permissions.allGranted {
             state = .needsPermissions
         } else if pip.isActive {
-            state = .docked(title: pip.title, thumbnail: thumbnail(), progress: pip.progress, isPlaying: pip.isPlaying)
+            state = .docked(title: pip.title, thumbnail: thumbnail(), progress: pip.progress,
+                            isPlaying: pip.features.playPause ? pip.isPlaying : nil)
         } else if pip.isReleased {
             state = .released(title: pip.title)
         } else {
@@ -170,7 +171,8 @@ private struct NowPlayingCard: View {
         case needsPermissions
         case waiting
         case released(title: String)
-        case docked(title: String, thumbnail: CGImage?, progress: Double?, isPlaying: Bool)
+        /// `isPlaying` is nil when the window doesn't tell (Chrome).
+        case docked(title: String, thumbnail: CGImage?, progress: Double?, isPlaying: Bool?)
     }
 
     let state: State
@@ -207,7 +209,7 @@ private struct NowPlayingCard: View {
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: 72, height: 41)
-                .saturation(isPlaying ? 1 : 0.2)
+                .saturation(isPlaying == false ? 0.2 : 1)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         default:
             Mascot(width: 54, awake: !isNeedsPermissions)
@@ -231,9 +233,11 @@ private struct NowPlayingCard: View {
     private var detail: String {
         switch state {
         case .needsPermissions: return "Allow them to dock the video."
-        case .waiting: return "Start Picture in Picture in Safari."
+        case .waiting: return "Start Picture in Picture in Safari or Chrome."
         case .released: return "Floating outside the island."
-        case let .docked(_, _, _, isPlaying): return isPlaying ? "Playing" : "Paused"
+        case let .docked(_, _, _, isPlaying):
+            guard let isPlaying else { return "In the island" }
+            return isPlaying ? "Playing" : "Paused"
         }
     }
 }

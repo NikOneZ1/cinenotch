@@ -275,7 +275,7 @@ private struct AboutPane: View {
             Text(version)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
-            Text("Safari's Picture in Picture video, tucked into the top of your screen.")
+            Text("Picture in Picture video from Safari or Chrome, tucked into the top of your screen.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

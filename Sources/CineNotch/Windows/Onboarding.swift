@@ -167,7 +167,7 @@ private struct WelcomeStep: View {
                 Text(hasNotch ? "Your video, tucked into the notch" : "Your video, tucked into the menu bar")
                     .font(Theme.display(28))
                     .multilineTextAlignment(.center)
-                Text("CineNotch moves Safari's Picture in Picture video into a little island at the top of your screen. Hover it, or just glance at the camera, and the video slides out.")
+                Text("CineNotch moves the Picture in Picture video from Safari or Chrome into a little island at the top of your screen. Hover it, or just glance at the camera, and the video slides out.")
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -252,7 +252,7 @@ private struct ReadyStep: View {
             VStack(spacing: 10) {
                 Text("You're ready")
                     .font(Theme.display(28))
-                Text("Start Picture in Picture on any video in Safari. CineNotch picks it up and tucks it \(hasNotch ? "into the notch" : "into the menu bar").")
+                Text("Start Picture in Picture on any video in Safari or Chrome. CineNotch picks it up and tucks it \(hasNotch ? "into the notch" : "into the menu bar").")
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

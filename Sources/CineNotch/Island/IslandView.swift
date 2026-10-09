@@ -47,13 +47,15 @@ struct IslandView: View {
                     .placed(video)
                     .onTapGesture { pip.togglePlay() }
 
+                // Chrome's window doesn't report progress or play state.
                 ProgressRing(progress: pip.progress, isPlaying: pip.isPlaying)
+                    .opacity(pip.features.progress ? 1 : 0)
                     .placed(x: centerX + motion[.ringX], y: top + motion[.ringY], width: motion[.ringSize], height: motion[.ringSize])
 
                 ProgressBar(progress: pip.progress)
                     .frame(width: max(0, motion[.barW]), height: max(0, motion[.barH]))
                     .scaleEffect(x: max(0.001, motion[.barGrow]), y: 1, anchor: .leading)
-                    .opacity(Double(motion[.barAlpha]))
+                    .opacity(pip.features.progress ? Double(motion[.barAlpha]) : 0)
                     .placed(x: centerX + motion[.barX], y: top + motion[.barY], width: motion[.barW], height: motion[.barH])
 
                 if expanded, let marker = island.videoMarker {
@@ -199,20 +201,21 @@ private struct ControlsRow: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            control(0) { IconButton(symbol: "xmark", size: 12, help: "Close Picture in Picture") { pip.close() } }
+            let features = pip.features
+            control(0, shown: features.close) { IconButton(symbol: "xmark", size: 12, help: "Close Picture in Picture") { pip.close() } }
             Spacer()
             HStack(spacing: 26) {
-                control(1) {
+                control(1, shown: features.skip) {
                     IconButton(symbol: "gobackward.10", size: 15, rotation: -40 * motion[.spinBack], help: "Back 10 seconds") {
                         motion.spin(forward: false)
                         pip.skip(forward: false)
                     }
                 }
-                control(2) {
+                control(2, shown: features.playPause) {
                     IconButton(symbol: pip.isPlaying ? "pause.fill" : "play.fill", size: 18, help: "Play / Pause") { pip.togglePlay() }
                         .animation(.spring(response: 0.3, dampingFraction: 0.75), value: pip.isPlaying)
                 }
-                control(3) {
+                control(3, shown: features.skip) {
                     IconButton(symbol: "goforward.10", size: 15, rotation: 40 * motion[.spinForward], help: "Forward 10 seconds") {
                         motion.spin(forward: true)
                         pip.skip(forward: true)
@@ -220,16 +223,22 @@ private struct ControlsRow: View {
                 }
             }
             Spacer()
-            control(4) { IconButton(symbol: "pip.exit", size: 14, help: "Back to Safari") { pip.returnToSafari() } }
+            control(4, shown: features.back) {
+                IconButton(symbol: "pip.exit", size: 14, help: pip.source == .chrome ? "Show the Tab in Chrome" : "Back to Safari") {
+                    pip.returnToApp()
+                }
+            }
         }
         .padding(.horizontal, 4)
     }
 
-    /// Each control fades up into place on its own spring.
-    private func control<Content: View>(_ index: Int, @ViewBuilder _ content: () -> Content) -> some View {
+    /// Each control fades up into place on its own spring. A control the window doesn't
+    /// support keeps its place but isn't drawn.
+    private func control<Content: View>(_ index: Int, shown: Bool, @ViewBuilder _ content: () -> Content) -> some View {
         let p = min(max(motion.control(index), 0), 1)
         return content()
-            .opacity(Double(p))
+            .opacity(shown ? Double(p) : 0)
+            .allowsHitTesting(shown)
             .offset(y: (1 - p) * 10)
             .blur(radius: p < 0.99 ? (1 - p) * 5 : 0)
     }

@@ -2,9 +2,36 @@ import AppKit
 import ApplicationServices
 import Combine
 
-/// Finds the system Picture in Picture window (owned by PIPAgent), parks it in the
-/// bottom-right corner of the screen where only a transparent 1×1 pt corner stays on screen,
-/// and exposes its state and buttons. The video itself is captured by `PiPCapture`.
+/// Who drew the docked Picture in Picture window.
+enum PiPSource: Equatable {
+    /// macOS's own PiP window (PIPAgent): Safari and other apps built on AVKit.
+    case system
+    /// Chrome's own PiP window. See `ChromePiP`.
+    case chrome
+
+    /// What the window itself offers. Chrome's play state, progress and playback come from Now
+    /// Playing instead, when it's about the same video (see `PiPController.chromeMedia`).
+    var features: PiPFeatures {
+        switch self {
+        case .system: return PiPFeatures(progress: true, playPause: true, skip: true, close: true, back: true)
+        case .chrome: return PiPFeatures(progress: false, playPause: false, skip: false, close: false, back: true)
+        }
+    }
+}
+
+/// What the docked window reports and which of its buttons CineNotch can press.
+struct PiPFeatures: Equatable {
+    var progress: Bool
+    var playPause: Bool
+    var skip: Bool
+    var close: Bool
+    /// Back to the app the video came from.
+    var back: Bool
+}
+
+/// Finds a Picture in Picture window (the system's, owned by PIPAgent, or Chrome's), parks it
+/// in the bottom-right corner of the screen where only a 1×1 pt corner stays on screen, and
+/// exposes its state and buttons. The video itself is captured by `PiPCapture`.
 @MainActor
 final class PiPController: ObservableObject {
     /// A PiP window is docked into the island.
@@ -17,8 +44,11 @@ final class PiPController: ObservableObject {
     @Published private(set) var progress: Double?
     /// Width / height of the PiP window.
     @Published private(set) var aspect: CGFloat = 16.0 / 9.0
+    @Published private(set) var source = PiPSource.system
+    @Published private(set) var features = PiPSource.system.features
 
     let capture = PiPCapture()
+    private let nowPlaying = NowPlaying()
     /// Size the PiP window is set to when docked; the island shows the video at this size.
     var dockedVideoSize: (_ aspect: CGFloat) -> CGSize = { CGSize(width: 560, height: 560 / $0) }
 
@@ -29,12 +59,21 @@ final class PiPController: ObservableObject {
     private var agentPID: pid_t?
     private var agent: AXUIElement?
     private var window: AXUIElement?
+    /// The process that owns `window`.
+    private var ownerPID: pid_t?
     private var windowID: CGWindowID?
     private var windowSize: CGSize = .zero
     /// Where the PiP window goes when released.
     private var homeFrame: CGRect?
     private var timer: Timer?
     private var nextCaptureAttempt = Date.distantPast
+    private var nextTitleCheck = Date.distantPast
+    /// The last Now Playing title that didn't match the docked video, logged once.
+    private var loggedMismatch = ""
+
+    init() {
+        nowPlaying.onChange = { [weak self] in self?.applyNowPlaying() }
+    }
 
     func start() {
         guard timer == nil, fakeTimer == nil else { return }
@@ -55,6 +94,11 @@ final class PiPController: ObservableObject {
 
     func togglePlay() {
         if fakeVideo != nil { return isPlaying.toggle() }
+        guard features.playPause else { return }
+        if source == .chrome {
+            setPlaying(!isPlaying)
+            return
+        }
         press(["pause", "play"])
         refreshSoon()
     }
@@ -64,9 +108,17 @@ final class PiPController: ObservableObject {
     /// Plays a paused video; false when it was already playing.
     @discardableResult func play() -> Bool { setPlaying(true) }
 
-    private func setPlaying(_ playing: Bool) -> Bool {
+    @discardableResult private func setPlaying(_ playing: Bool) -> Bool {
         if fakeVideo != nil {
             guard isPlaying != playing else { return false }
+            isPlaying = playing
+            return true
+        }
+        guard features.playPause else { return false }
+        if source == .chrome {
+            guard isPlaying != playing else { return false }
+            playing ? nowPlaying.play() : nowPlaying.pause()
+            // Now Playing confirms a moment later.
             isPlaying = playing
             return true
         }
@@ -83,17 +135,37 @@ final class PiPController: ObservableObject {
             progress = (fakeProgress * 100).rounded() / 100
             return
         }
+        guard features.skip else { return }
+        if source == .chrome {
+            guard let media = chromeMedia else { return }
+            var target = max(media.position() + (forward ? 10 : -10), 0)
+            if let duration = media.duration {
+                target = min(target, duration)
+                progress = target / duration
+            }
+            nowPlaying.seek(to: target)
+            return
+        }
         press([forward ? "skip-forward" : "skip-back"])
         refreshSoon()
     }
 
-    func returnToSafari() {
+    /// Back to where the video came from: Safari takes it out of Picture in Picture, Chrome
+    /// just shows its tab (its PiP window can't be closed from here).
+    func returnToApp() {
         if fakeVideo != nil { return closeFake() }
-        press(["restore"])
+        guard features.back else { return }
+        switch source {
+        case .system: press(["restore"])
+        case .chrome:
+            guard let ownerPID, let window else { return }
+            ChromePiP.showTab(pid: ownerPID, pipWindow: window)
+        }
     }
 
     func close() {
         if fakeVideo != nil { return closeFake() }
+        guard features.close else { return }
         press(["close"])
     }
 
@@ -122,29 +194,61 @@ final class PiPController: ObservableObject {
 
     private func tick() {
         guard AXIsProcessTrusted() else { return }
-        guard let pid = NSRunningApplication.runningApplications(withBundleIdentifier: Self.agentBundleID).first?.processIdentifier else {
+        guard let found = findWindow() else {
             detach()
-            agentPID = nil
-            agent = nil
             return
         }
+        if let window, CFEqual(window, found.element) {
+            refreshState()
+            if !isReleased { keepDocked() }
+        } else {
+            attach(found)
+        }
+    }
+
+    private struct FoundWindow {
+        let element: AXUIElement
+        let pid: pid_t
+        let source: PiPSource
+        var windowID: CGWindowID?
+    }
+
+    /// The window to dock: the docked one while it lasts, otherwise the system's before Chrome's.
+    private func findWindow() -> FoundWindow? {
+        let order: [PiPSource] = window != nil && source == .chrome ? [.chrome, .system] : [.system, .chrome]
+        for source in order {
+            switch source {
+            case .system:
+                if let found = systemWindow() { return found }
+            case .chrome:
+                if let found = ChromePiP.find(known: dockedChromeWindow) {
+                    return FoundWindow(element: found.element, pid: found.pid, source: .chrome, windowID: found.windowID)
+                }
+            }
+        }
+        return nil
+    }
+
+    /// The docked window, when it's Chrome's.
+    private var dockedChromeWindow: ChromePiP.Window? {
+        guard source == .chrome, let window, let ownerPID, let windowID else { return nil }
+        return ChromePiP.Window(pid: ownerPID, windowID: windowID, element: window)
+    }
+
+    private func systemWindow() -> FoundWindow? {
+        guard let pid = NSRunningApplication.runningApplications(withBundleIdentifier: Self.agentBundleID).first?.processIdentifier else {
+            agentPID = nil
+            agent = nil
+            return nil
+        }
         if pid != agentPID {
-            detach()
             agentPID = pid
             let element = AXUIElementCreateApplication(pid)
             AXUIElementSetMessagingTimeout(element, 0.25)
             agent = element
         }
-        guard let agent, let found = Self.pipWindow(in: agent) else {
-            detach()
-            return
-        }
-        if let window, CFEqual(window, found) {
-            refreshState()
-            if !isReleased { keepDocked() }
-        } else {
-            attach(found, pid: pid)
-        }
+        guard let agent, let element = Self.pipWindow(in: agent) else { return nil }
+        return FoundWindow(element: element, pid: pid, source: .system)
     }
 
     private static func pipWindow(in agent: AXUIElement) -> AXUIElement? {
@@ -153,21 +257,38 @@ final class PiPController: ObservableObject {
             ?? windows.first { (AX.size($0)?.width ?? 0) > 100 }
     }
 
-    private func attach(_ newWindow: AXUIElement, pid: pid_t) {
+    private func attach(_ found: FoundWindow) {
         detach()
-        window = newWindow
-        let frame = AX.frame(newWindow) ?? .zero
+        window = found.element
+        ownerPID = found.pid
+        source = found.source
+        let frame = AX.frame(found.element) ?? .zero
         homeFrame = Parking.isParked(frame) ? Parking.defaultHome(for: frame.size) : frame
-        windowID = WindowList.windowID(ownerPID: pid, matching: frame)
-        title = SafariInfo.frontTabTitle() ?? "Picture in Picture"
+        windowID = found.windowID ?? WindowList.windowID(ownerPID: found.pid, matching: frame)
+        title = videoTitle() ?? "Picture in Picture"
+        nextTitleCheck = Date().addingTimeInterval(2)
         isReleased = false
-        Log.info("attached PiP window id=\(windowID.map(String.init) ?? "nil") frame=\(frame) title='\(title)'")
+        Log.info("attached \(found.source) PiP window id=\(windowID.map(String.init) ?? "nil") frame=\(frame) title='\(title)'")
+        if source == .chrome { nowPlaying.start() }
+        updateFeatures()
         refreshState()
-        dockWindow(newWindow)
+        dockWindow(found.element)
+    }
+
+    private func videoTitle() -> String? {
+        switch source {
+        case .system: return SafariInfo.frontTabTitle()
+        case .chrome:
+            guard let ownerPID, let window else { return nil }
+            return ChromePiP.videoTitle(pid: ownerPID, pipWindow: window)
+        }
     }
 
     private func dockWindow(_ window: AXUIElement) {
         if let size = AX.size(window), size.height > 0 {
+            // Chrome keeps its window inside the screen while resizing, so it first goes
+            // where there's room for the new size.
+            if source == .chrome { AX.setPosition(window, Parking.roomyPoint()) }
             AX.setSize(window, dockedVideoSize(size.width / size.height))
         }
         AX.setPosition(window, Parking.point())
@@ -180,12 +301,15 @@ final class PiPController: ObservableObject {
         guard window != nil else { return }
         Log.info("PiP window gone")
         capture.stop()
+        nowPlaying.stop()
         window = nil
+        ownerPID = nil
         windowID = nil
         windowSize = .zero
         isActive = false
         isReleased = false
         progress = nil
+        isPlaying = true
     }
 
     private func keepDocked() {
@@ -195,7 +319,7 @@ final class PiPController: ObservableObject {
         if abs(frame.minX - target.x) > 0.5 || abs(frame.minY - target.y) > 0.5 {
             AX.setPosition(window, target)
         }
-        if windowID == nil, let pid = agentPID {
+        if windowID == nil, let pid = ownerPID {
             windowID = WindowList.windowID(ownerPID: pid, matching: AX.frame(window) ?? frame)
         }
         if !capture.isRunning, Date() >= nextCaptureAttempt { startCapture() }
@@ -219,6 +343,19 @@ final class PiPController: ObservableObject {
 
     private func refreshState() {
         guard let window else { return }
+        if source == .chrome {
+            // The window shows nothing to read; the title follows the next video in the tab,
+            // the rest comes from Now Playing.
+            if Date() >= nextTitleCheck {
+                nextTitleCheck = Date().addingTimeInterval(2)
+                if let video = videoTitle(), video != title {
+                    title = video
+                    updateFeatures()
+                }
+            }
+            applyChromeMedia()
+            return
+        }
         var playing: Bool?
         var percent: Double?
         for child in AX.children(of: window) {
@@ -235,6 +372,50 @@ final class PiPController: ObservableObject {
         }
         if let playing, playing != isPlaying { isPlaying = playing }
         if percent != progress { progress = percent }
+    }
+
+    /// Now Playing, while it's about the docked Chrome video: from that Chrome, with a matching
+    /// title (another tab may be playing music).
+    private var chromeMedia: NowPlaying.State? {
+        guard source == .chrome, let media = nowPlaying.state, media.pid == ownerPID else { return nil }
+        guard VideoTitle.sameVideo(media.title, title) else {
+            if media.title != loggedMismatch {
+                loggedMismatch = media.title
+                Log.info("now playing: '\(media.title)' isn't the docked video '\(title)'")
+            }
+            return nil
+        }
+        return media
+    }
+
+    private func updateFeatures() {
+        var new = source.features
+        if let media = chromeMedia {
+            new.playPause = true
+            new.skip = true
+            new.progress = media.duration != nil
+        }
+        guard new != features else { return }
+        if source == .chrome, new.playPause != features.playPause {
+            Log.info("chrome: controls \(new.playPause ? "on" : "off") (Now Playing)")
+        }
+        features = new
+    }
+
+    private func applyNowPlaying() {
+        guard window != nil, source == .chrome else { return }
+        updateFeatures()
+        applyChromeMedia()
+    }
+
+    private func applyChromeMedia() {
+        guard let media = chromeMedia else {
+            if progress != nil { progress = nil }
+            return
+        }
+        if media.isPlaying != isPlaying { isPlaying = media.isPlaying }
+        let fraction = media.duration.map { ((media.position() / $0) * 1000).rounded() / 1000 }
+        if fraction != progress { progress = fraction }
     }
 
     private func refreshSoon() {
@@ -317,6 +498,13 @@ enum Parking {
         return CGPoint(x: target.frame.maxX - 1, y: primary.frame.height - target.frame.minY - 1)
     }
 
+    /// Top-left corner of the main screen's visible area, where any docked size fits.
+    @MainActor static func roomyPoint() -> CGPoint {
+        guard let screen = NSScreen.main ?? NSScreen.screens.first,
+              let primaryHeight = NSScreen.screens.first?.frame.height else { return .zero }
+        return CGPoint(x: screen.visibleFrame.minX, y: primaryHeight - screen.visibleFrame.maxY)
+    }
+
     @MainActor static func isParked(_ frame: CGRect) -> Bool {
         let p = point()
         return abs(frame.minX - p.x) < 2 && abs(frame.minY - p.y) < 2
@@ -363,12 +551,23 @@ enum SafariInfo {
                 ?? AX.element(element, kAXMainWindowAttribute)
                 ?? AX.windows(of: element).first
             if let title = window.flatMap({ AX.string($0, kAXTitleAttribute) }), !title.isEmpty {
-                return clean(title)
+                return VideoTitle.clean(title)
             }
         }
         return nil
     }
+}
 
+enum VideoTitle {
+    /// Whether two titles name the same video: Now Playing has the page's media title, while
+    /// the tab title often adds the site.
+    static func sameVideo(_ a: String, _ b: String) -> Bool {
+        let x = clean(a).lowercased(), y = clean(b).lowercased()
+        guard !x.isEmpty, !y.isEmpty else { return false }
+        return x == y || x.contains(y) || y.contains(x)
+    }
+
+    /// A tab title without the unread count and the site name.
     static func clean(_ title: String) -> String {
         var s = title.replacingOccurrences(of: #"^\(\d+\)\s*"#, with: "", options: .regularExpression)
         s = s.replacingOccurrences(of: #"\s+[-–—|]\s+(YouTube|Twitch|Vimeo)$"#, with: "", options: .regularExpression)
