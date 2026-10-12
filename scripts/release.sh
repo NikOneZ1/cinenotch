@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds build/CineNotch.dmg for download: a universal app signed with Developer ID, notarized
-# and stapled, inside a signed, notarized and stapled disk image with an Applications shortcut.
+# and stapled, inside a signed, notarized and stapled disk image: drag the app onto Applications.
 # Also builds the in-app update: build/CineNotch-<version>.zip and build/appcast.xml, signed with
 # the Sparkle key. Publish the zip with the GitHub release and appcast.xml on cinenotch.cam.
 #
@@ -100,13 +100,15 @@ cat > build/appcast.xml <<XML
 </rss>
 XML
 
-# 3. The disk image: the app plus a shortcut to drag it onto.
-STAGE=$(mktemp -d)
-trap 'rm -rf "$STAGE"' EXIT
-ditto "$APP" "$STAGE/CineNotch.app"
-ln -s /Applications "$STAGE/Applications"
+# 3. The disk image: the app on the left, Applications on the right, the "drag it in" arrow
+#    between them (scripts/dmg-settings.py). dmgbuild writes the window layout itself, no Finder.
+DMGBUILD="build/dmgbuild-venv/bin/dmgbuild"
+if [[ ! -x "$DMGBUILD" ]]; then
+  python3 -m venv build/dmgbuild-venv
+  build/dmgbuild-venv/bin/pip install -q "dmgbuild==1.6.7"
+fi
 rm -f "$DMG"
-hdiutil create -quiet -volname "CineNotch" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG"
+"$DMGBUILD" -s scripts/dmg-settings.py -D app="$APP" CineNotch "$DMG" >/dev/null
 codesign --force --sign "$IDENTITY" --timestamp "$DMG"
 notarize "$DMG"
 xcrun stapler staple -q "$DMG"
