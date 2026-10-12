@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let options = LaunchOptions.current
     private let pip = PiPController()
     private let gaze = GazeController()
+    private let updates = Updates()
     private var island: IslandController?
     private var calibrator: GazeCalibrator?
     private var tester: GazeTester?
@@ -35,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.hud = hud
         let collapsePause = CollapsePause(pip: pip, island: island)
         self.collapsePause = collapsePause
-        let settings = SettingsWindow(gaze: gaze, glow: island.glow, collapsePause: collapsePause,
+        let settings = SettingsWindow(gaze: gaze, glow: island.glow, collapsePause: collapsePause, updates: updates,
                                       calibrate: { calibrator.start() })
         self.settings = settings
         let onboarding = Onboarding()
@@ -54,7 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { visible in visible ? hud.show() : hud.hide() }
             .store(in: &cancellables)
 
-        statusMenu = StatusMenu(pip: pip, gaze: gaze, collapsePause: collapsePause, thumbnail: { [weak island] in island?.thumbnail() },
+        statusMenu = StatusMenu(pip: pip, gaze: gaze, collapsePause: collapsePause, updates: updates,
+                                thumbnail: { [weak island] in island?.thumbnail() },
                                 showPermissions: { onboarding.show(.permissions) },
                                 showSettings: { settings.show() },
                                 calibrate: { calibrator.start() },
@@ -77,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await previewWindows(into: dir) }
         }
         installSignalHandlers()
+        updates.start()
         if Permissions.allGranted || options.debugFakePiP {
             startEngine()
             if !Onboarding.isDone, !options.debugFakePiP { onboarding.show(.ready) }

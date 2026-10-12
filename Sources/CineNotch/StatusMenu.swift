@@ -10,6 +10,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let pip: PiPController
     private let gaze: GazeController
     private let collapsePause: CollapsePause
+    private let updates: Updates
     private let thumbnail: () -> CGImage?
     private let showPermissions: () -> Void
     private let showSettings: () -> Void
@@ -17,12 +18,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let testGaze: () -> Void
     private var cancellables = Set<AnyCancellable>()
 
-    init(pip: PiPController, gaze: GazeController, collapsePause: CollapsePause, thumbnail: @escaping () -> CGImage?,
+    init(pip: PiPController, gaze: GazeController, collapsePause: CollapsePause, updates: Updates,
+         thumbnail: @escaping () -> CGImage?,
          showPermissions: @escaping () -> Void, showSettings: @escaping () -> Void,
          calibrate: @escaping () -> Void, testGaze: @escaping () -> Void) {
         self.pip = pip
         self.gaze = gaze
         self.collapsePause = collapsePause
+        self.updates = updates
         self.thumbnail = thumbnail
         self.showPermissions = showPermissions
         self.showSettings = showSettings
@@ -81,6 +84,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(makeItem("Settings…", #selector(openSettings), key: ",", symbol: "gearshape"))
+        if updates.isAvailable {
+            menu.addItem(makeItem("Check for Updates…", #selector(checkForUpdates), symbol: "arrow.down.circle"))
+        }
         menu.addItem(makeItem("Quit CineNotch", #selector(quit), key: "q", symbol: "power"))
 
         if developer { addDeveloperItems(to: menu) }
@@ -139,6 +145,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     @objc private func releaseWindow() { pip.release() }
     @objc private func openPermissions() { showPermissions() }
     @objc private func openSettings() { showSettings() }
+    @objc private func checkForUpdates() { updates.checkForUpdates() }
     @objc private func startCalibration() { calibrate() }
     @objc private func startGazeTest() { testGaze() }
 

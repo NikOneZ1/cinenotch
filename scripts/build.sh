@@ -29,6 +29,10 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 lipo -create "${BIN_DIRS[@]/%//CineNotch}" -output "$APP/Contents/MacOS/CineNotch"
 lipo -create "${BIN_DIRS[@]/%//libNowPlayingBridge.dylib}" -output "$APP/Contents/Frameworks/libNowPlayingBridge.dylib"
+# Sparkle, for in-app updates. Its XPC services only matter to sandboxed apps, so they stay out.
+ditto "${BIN_DIRS[0]}/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
+rm -rf "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" "$APP/Contents/Frameworks/Sparkle.framework/XPCServices"
+install_name_tool -add_rpath @executable_path/../Frameworks "$APP/Contents/MacOS/CineNotch"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 # Drawn by scripts/make-icon.swift.
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
@@ -47,6 +51,10 @@ fi
 # Hardened runtime on every build, so everyday builds behave like the notarized one.
 FLAGS=(--force --options runtime --sign "$SIGN")
 [[ "${TIMESTAMP:-0}" == 1 ]] && FLAGS+=(--timestamp)
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+codesign "${FLAGS[@]}" "$SPARKLE/Versions/B/Autoupdate"
+codesign "${FLAGS[@]}" "$SPARKLE/Versions/B/Updater.app"
+codesign "${FLAGS[@]}" "$SPARKLE"
 codesign "${FLAGS[@]}" "$APP/Contents/Frameworks/libNowPlayingBridge.dylib"
 codesign "${FLAGS[@]}" --entitlements Resources/CineNotch.entitlements "$APP"
 echo "built $APP"

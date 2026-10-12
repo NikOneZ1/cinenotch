@@ -9,9 +9,14 @@ let package = Package(
         // Loaded into /usr/bin/perl to reach macOS's Now Playing (see NowPlaying.swift).
         .library(name: "NowPlayingBridge", type: .dynamic, targets: ["NowPlayingBridge"]),
     ],
+    dependencies: [
+        // In-app updates from the appcast on cinenotch.cam.
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+    ],
     targets: [
         .executableTarget(
             name: "CineNotch",
+            dependencies: [.product(name: "Sparkle", package: "Sparkle")],
             path: "Sources/CineNotch"
         ),
         .target(

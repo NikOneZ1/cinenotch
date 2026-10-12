@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>2</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
@@ -28,5 +28,11 @@
 	<string>CineNotch reveals the video when you glance at the camera. Frames are analyzed on your Mac and are never stored or sent anywhere.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>CineNotch shows the Picture in Picture video inside the island. Only the PiP window is captured and nothing leaves your Mac.</string>
+	<key>SUFeedURL</key>
+	<string>https://cinenotch.cam/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>08z6DpbAmHlb74NlN5wgwzUA+dlMpGlZAj/vm2qZccQ=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 </dict>
 </plist>

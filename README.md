@@ -41,6 +41,9 @@ Status: early (0.1.0). Safari and Chrome, one screen.
 for macOS 14 or later, Apple silicon and Intel. It's also on [cinenotch.cam](https://cinenotch.cam).
 The app is signed with Developer ID and notarized by Apple: open the disk image and drag
 CineNotch to Applications.
+From 0.2.0 on it updates itself with [Sparkle](https://sparkle-project.org): once a day it checks
+`cinenotch.cam/appcast.xml` (Settings → General turns that off), and **Check for Updates…** is
+in the menu.
 
 ## First launch
 

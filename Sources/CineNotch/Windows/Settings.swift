@@ -3,7 +3,7 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// Settings: General (permissions, the glow, pausing), Gaze (camera preview, sensitivity, calibration), About.
+/// Settings: General (permissions, the glow, pausing, updates), Gaze (camera preview, sensitivity, calibration), About.
 @MainActor
 final class SettingsWindow: NSObject, NSWindowDelegate {
     enum Tab: Int { case general, gaze, about }
@@ -11,14 +11,17 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private let gaze: GazeController
     private let glow: AmbientGlow
     private let collapsePause: CollapsePause
+    private let updates: Updates
     private let calibrate: () -> Void
     private var window: NSWindow?
     private var tabs: NSTabViewController?
 
-    init(gaze: GazeController, glow: AmbientGlow, collapsePause: CollapsePause, calibrate: @escaping () -> Void) {
+    init(gaze: GazeController, glow: AmbientGlow, collapsePause: CollapsePause, updates: Updates,
+         calibrate: @escaping () -> Void) {
         self.gaze = gaze
         self.glow = glow
         self.collapsePause = collapsePause
+        self.updates = updates
         self.calibrate = calibrate
     }
 
@@ -40,7 +43,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private func makeWindow() {
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
-        tabs.addTabViewItem(item("General", symbol: "gearshape", GeneralPane(glow: glow, collapsePause: collapsePause)))
+        tabs.addTabViewItem(item("General", symbol: "gearshape", GeneralPane(glow: glow, collapsePause: collapsePause, updates: updates)))
         tabs.addTabViewItem(item("Gaze", symbol: "eye", GazePane(gaze: gaze, calibrate: { [weak self] in
             self?.window?.close()
             self?.calibrate()
@@ -72,6 +75,8 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 private struct GeneralPane: View {
     @ObservedObject var glow: AmbientGlow
     @ObservedObject var collapsePause: CollapsePause
+    let updates: Updates
+    @State private var checksForUpdates = true
     @State private var accessibility = Permissions.accessibility
     @State private var screenRecording = Permissions.screenRecording
     private let poll = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -96,10 +101,23 @@ private struct GeneralPane: View {
                     Text("The video plays only while the island is open. A video you paused stays paused.")
                 }
             }
+            if updates.isAvailable {
+                Section("Updates") {
+                    Toggle(isOn: Binding(get: { checksForUpdates }, set: { on in
+                        checksForUpdates = on
+                        updates.automaticallyChecks = on
+                    })) {
+                        Text("Check for updates automatically")
+                        Text("Once a day CineNotch asks cinenotch.cam whether there's a new version. Nothing else is sent.")
+                    }
+                    Button("Check Now") { updates.checkForUpdates() }
+                }
+            }
         }
         .formStyle(.grouped)
         .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
+        .onAppear { checksForUpdates = updates.automaticallyChecks }
         .onReceive(poll) { _ in
             accessibility = Permissions.accessibility
             screenRecording = Permissions.screenRecording
