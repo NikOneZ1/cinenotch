@@ -33,22 +33,18 @@ Prefer the mouse? Hover the island to open it, move the cursor away to close it.
 - The island grows out of the notch when Picture in Picture starts and tucks back into it when
   it ends; a soft glow in the video's colors sits under the open island (Settings → General).
 
-Status: MVP. Safari and Chrome, one screen. There is no signed download yet, so for now CineNotch
-is built from source.
+Status: early (0.1.0). Safari and Chrome, one screen.
 
-## Requirements
+## Download
 
-- macOS 14 or later
-- Swift 5.9+ (Xcode or just the Command Line Tools)
+**[Download CineNotch](https://github.com/NikOneZ1/cinenotch/releases/latest/download/CineNotch.dmg)**
+for macOS 14 or later, Apple silicon and Intel. It's also on [cinenotch.cam](https://cinenotch.cam).
+The app is signed with Developer ID and notarized by Apple: open the disk image and drag
+CineNotch to Applications.
 
-## Build and run
+## First launch
 
-```bash
-./scripts/make-dev-cert.sh   # once: local signing identity, keeps permissions across rebuilds
-./scripts/run.sh             # build build/CineNotch.app and (re)start it
-```
-
-On first launch a short onboarding asks for two permissions:
+A short onboarding asks for two permissions:
 
 - **Accessibility**: to find the PiP window, tuck it away and press its buttons.
 - **Screen Recording**: to show the PiP video in the island. Only the PiP window is captured,
@@ -66,6 +62,19 @@ camera access and CineNotch walks you through the calibration: follow the target
 
 The camera runs only while a PiP video is docked and the glance is on, so the green camera
 light is on during that time.
+
+## Build from source
+
+Needs macOS 14 or later and Swift 5.9+ (Xcode or just the Command Line Tools).
+
+```bash
+./scripts/make-dev-cert.sh   # once: local signing identity, keeps permissions across rebuilds
+./scripts/run.sh             # build build/CineNotch.app and (re)start it
+```
+
+`./scripts/release.sh` builds the download: a universal app signed with Developer ID, notarized
+and stapled, in a notarized `build/CineNotch.dmg`. It needs the Developer ID certificate and
+notarytool credentials (see the comment at the top of the script).
 
 ## How it works
 
