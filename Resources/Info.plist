@@ -2,37 +2,37 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDisplayName</key>
+	<string>CineNotch</string>
+	<key>CFBundleExecutable</key>
+	<string>CineNotch</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.cinenotch.CineNotch</string>
 	<key>CFBundleName</key>
 	<string>CineNotch</string>
-	<key>CFBundleDisplayName</key>
-	<string>CineNotch</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
-	<key>CFBundleExecutable</key>
-	<string>CineNotch</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.0</string>
+	<string>0.3.0</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>3</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSHighResolutionCapable</key>
-	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>CineNotch reveals the video when you glance at the camera. Frames are analyzed on your Mac and are never stored or sent anywhere.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>CineNotch shows the Picture in Picture video inside the island. Only the PiP window is captured and nothing leaves your Mac.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 	<key>SUFeedURL</key>
 	<string>https://cinenotch.cam/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>08z6DpbAmHlb74NlN5wgwzUA+dlMpGlZAj/vm2qZccQ=</string>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
 </dict>
 </plist>

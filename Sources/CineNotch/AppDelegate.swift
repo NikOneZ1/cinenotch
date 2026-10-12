@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let updates = Updates()
     private var island: IslandController?
     private var calibrator: GazeCalibrator?
+    private var glanceInvite: GlanceInvite?
     private var tester: GazeTester?
     private var hud: GazeHUD?
     private var statusMenu: StatusMenu?
@@ -30,6 +31,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.island = island
         let calibrator = GazeCalibrator(gaze: gaze, island: island)
         self.calibrator = calibrator
+        // The demo plays its own glances, so it never asks for a calibration.
+        if !options.debugDemo {
+            glanceInvite = GlanceInvite(gaze: gaze, island: island, pip: pip, calibrate: { calibrator.start() })
+        }
         let tester = GazeTester(gaze: gaze, island: island)
         self.tester = tester
         let hud = GazeHUD(gaze: gaze)
@@ -102,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if options.debugDemo, let island { DemoScript.run(pip: pip, island: island, recordTo: options.debugRecordURL) }
     }
 
-    /// `--debug-windows <dir>`: every onboarding step and the camera-free Settings tabs, one picture each.
+    /// `--debug-windows <dir>`: every onboarding step, the camera-free Settings tabs and the calibration invite, one picture each.
     private func previewWindows(into dir: URL) async {
         guard let onboarding, let settings else { return }
         func snap(_ number: Int?, _ name: String) async {
@@ -120,6 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await snap(settings.windowNumber, "settings-\(tab)")
         }
         settings.close()
+        GlanceInvite.renderPreviews(into: dir)
     }
 
     private func installSignalHandlers() {

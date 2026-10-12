@@ -48,7 +48,15 @@ else
   exit 1
 fi
 
-# Hardened runtime on every build, so everyday builds behave like the notarized one.
+# Hardened runtime on every build, so everyday builds behave like the notarized one. Its library
+# validation wants the app and Sparkle signed by one team, which only a Developer ID certificate
+# has, so local builds (the self-signed "CineNotch Dev" or ad hoc) are allowed to load Sparkle.
+ENTITLEMENTS=Resources/CineNotch.entitlements
+if [[ "$SIGN" != "Developer ID Application:"* ]]; then
+  ENTITLEMENTS=build/CineNotch-local.entitlements
+  cp Resources/CineNotch.entitlements "$ENTITLEMENTS"
+  /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" "$ENTITLEMENTS"
+fi
 FLAGS=(--force --options runtime --sign "$SIGN")
 [[ "${TIMESTAMP:-0}" == 1 ]] && FLAGS+=(--timestamp)
 SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
@@ -56,5 +64,5 @@ codesign "${FLAGS[@]}" "$SPARKLE/Versions/B/Autoupdate"
 codesign "${FLAGS[@]}" "$SPARKLE/Versions/B/Updater.app"
 codesign "${FLAGS[@]}" "$SPARKLE"
 codesign "${FLAGS[@]}" "$APP/Contents/Frameworks/libNowPlayingBridge.dylib"
-codesign "${FLAGS[@]}" --entitlements Resources/CineNotch.entitlements "$APP"
+codesign "${FLAGS[@]}" --entitlements "$ENTITLEMENTS" "$APP"
 echo "built $APP"

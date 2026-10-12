@@ -55,11 +55,13 @@ A short onboarding asks for two permissions:
 
 Then start Picture in Picture on any video in Safari or Chrome.
 
-### Turn on the glance
+### The glance
 
-Menu bar icon → **Reveal the Video** (or Settings → Gaze). The first time, macOS asks for
-camera access and CineNotch walks you through the calibration: follow the targets for about
-50 s. **Recalibrate…** is in Settings → Gaze.
+The glance is on from the start, but it needs a calibration before it can work: until then the
+camera stays off. The first time a video docks, a card under the island offers the calibration
+(**Calibrate**, **Later** to be asked on the next launch, or **I'll use the mouse** to turn the
+glance off). macOS asks for camera access, then you follow the targets for about 50 s. It's
+also in the menu (**Calibrate…**) and in Settings → Gaze, where **Recalibrate…** lives too.
 **Sensitivity** trades accidental reveals (strict) against glances that need repeating
 (sensitive). Settings → Gaze shows what the camera sees and where it thinks you look.
 

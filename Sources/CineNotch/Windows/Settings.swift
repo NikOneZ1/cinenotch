@@ -149,7 +149,9 @@ private struct GazePane: View {
                     if on, !gaze.isCalibrated { calibrate() }
                 })) {
                     Text("Reveal the video by glancing at the camera")
-                    Text("The video slides out while you look at it and tucks back in when you look away.")
+                    Text(gaze.isEnabled && !gaze.isCalibrated
+                         ? "On, but it needs a 50-second calibration before it can work. Calibrate below."
+                         : "The video slides out while you look at it and tucks back in when you look away.")
                 }
             }
             Section("Camera") {

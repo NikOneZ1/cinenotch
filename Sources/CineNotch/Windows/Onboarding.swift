@@ -271,13 +271,13 @@ private struct ReadyStep: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Reveal it with a glance")
                         .font(.system(size: 13, weight: .semibold))
-                    Text("Look at the camera and the video slides out. Takes a 50-second calibration.")
+                    Text("It's on. Calibrate once, in about 50 seconds, and a glance at the camera brings the video out.")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
-                Button("Set up") { model.onDone(true) }
+                Button("Calibrate") { model.onDone(true) }
                     .buttonStyle(QuietButtonStyle())
             }
             .padding(14)

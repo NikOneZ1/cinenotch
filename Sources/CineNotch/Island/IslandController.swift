@@ -131,6 +131,11 @@ final class IslandController: ObservableObject {
                        y: rect.maxY - layout.video.minY - layout.video.height * spot.y)
     }
 
+    /// The collapsed island in screen coordinates (bottom-left origin).
+    func collapsedRectOnScreen() -> CGRect {
+        metrics.screenRect(for: metrics.layout(expanded: false, aspect: pip.aspect))
+    }
+
     /// The expanded island in screen coordinates (bottom-left origin).
     func expandedRectOnScreen() -> CGRect {
         metrics.screenRect(for: metrics.layout(expanded: true, aspect: pip.aspect))

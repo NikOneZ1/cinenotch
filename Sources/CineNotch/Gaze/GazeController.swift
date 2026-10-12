@@ -54,6 +54,8 @@ final class GazeController: ObservableObject {
     @Published private(set) var reports: [String: GazeTrainingReport] = [:]
     @Published private(set) var features: GazeFeatures?
     @Published private(set) var isCalibrated = false
+    /// The stored calibration (if any) has been read after launch, so `isCalibrated` can be trusted.
+    @Published private(set) var hasLoadedCalibration = false
     @Published private(set) var isCameraRunning = false
 
     var isPiPActive = false { didSet { updateCamera() } }
@@ -94,7 +96,8 @@ final class GazeController: ObservableObject {
     private var csv: CSVLog?
 
     init() {
-        isEnabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
+        // On unless the user turned it off. It does nothing until there's a calibration.
+        isEnabled = UserDefaults.standard.object(forKey: Self.enabledKey) as? Bool ?? true
         let stored = UserDefaults.standard.string(forKey: Self.engineKey)
         activeEngineID = Self.engineTypes.contains { $0.id == stored } ? stored! : Self.engineTypes.last!.id
         sensitivity = GazeSensitivity(rawValue: UserDefaults.standard.string(forKey: Self.sensitivityKey) ?? "") ?? .strict
@@ -107,6 +110,7 @@ final class GazeController: ObservableObject {
     }
 
     func loadStoredCalibration() async {
+        defer { hasLoadedCalibration = true }
         guard let calibration = GazeCalibrationStore.load() else { return }
         await train(calibration.samples)
     }
