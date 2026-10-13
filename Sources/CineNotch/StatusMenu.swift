@@ -10,6 +10,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let pip: PiPController
     private let gaze: GazeController
     private let collapsePause: CollapsePause
+    private let awayPause: AwayPause
     private let updates: Updates
     private let thumbnail: () -> CGImage?
     private let showPermissions: () -> Void
@@ -18,13 +19,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let testGaze: () -> Void
     private var cancellables = Set<AnyCancellable>()
 
-    init(pip: PiPController, gaze: GazeController, collapsePause: CollapsePause, updates: Updates,
+    init(pip: PiPController, gaze: GazeController, collapsePause: CollapsePause, awayPause: AwayPause, updates: Updates,
          thumbnail: @escaping () -> CGImage?,
          showPermissions: @escaping () -> Void, showSettings: @escaping () -> Void,
          calibrate: @escaping () -> Void, testGaze: @escaping () -> Void) {
         self.pip = pip
         self.gaze = gaze
         self.collapsePause = collapsePause
+        self.awayPause = awayPause
         self.updates = updates
         self.thumbnail = thumbnail
         self.showPermissions = showPermissions
@@ -69,6 +71,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         sensitivityItem.submenu = sensitivities
         menu.addItem(sensitivityItem)
         menu.addItem(makeItem(gaze.isCalibrated ? "Recalibrate…" : "Calibrate…", #selector(startCalibration), symbol: "scope"))
+        let awayItem = makeItem("Pause When You Step Away", #selector(togglePausesWhenAway), symbol: "figure.walk")
+        awayItem.state = awayPause.isEnabled ? .on : .off
+        menu.addItem(awayItem)
 
         menu.addItem(.separator())
         let pauseItem = makeItem("Pause When the Island Closes", #selector(togglePausesWhenCollapsed), symbol: "pause.circle")
@@ -160,6 +165,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
     @objc private func toggleHUD() { gaze.isHUDVisible.toggle() }
     @objc private func togglePausesWhenCollapsed() { collapsePause.isEnabled.toggle() }
+    @objc private func togglePausesWhenAway() { awayPause.isEnabled.toggle() }
 
     @objc private func openLogs() {
         NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs"))

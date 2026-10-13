@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboarding: Onboarding?
     private var settings: SettingsWindow?
     private var collapsePause: CollapsePause?
+    private var awayPause: AwayPause?
     private var cancellables = Set<AnyCancellable>()
     private var signalSources: [DispatchSourceSignal] = []
     private var started = false
@@ -41,7 +42,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.hud = hud
         let collapsePause = CollapsePause(pip: pip, island: island)
         self.collapsePause = collapsePause
-        let settings = SettingsWindow(gaze: gaze, glow: island.glow, collapsePause: collapsePause, updates: updates,
+        let awayPause = AwayPause(pip: pip, island: island, gaze: gaze)
+        self.awayPause = awayPause
+        let settings = SettingsWindow(gaze: gaze, glow: island.glow, collapsePause: collapsePause, awayPause: awayPause,
+                                      updates: updates,
                                       calibrate: { calibrator.start() })
         self.settings = settings
         let onboarding = Onboarding()
@@ -60,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { visible in visible ? hud.show() : hud.hide() }
             .store(in: &cancellables)
 
-        statusMenu = StatusMenu(pip: pip, gaze: gaze, collapsePause: collapsePause, updates: updates,
+        statusMenu = StatusMenu(pip: pip, gaze: gaze, collapsePause: collapsePause, awayPause: awayPause, updates: updates,
                                 thumbnail: { [weak island] in island?.thumbnail() },
                                 showPermissions: { onboarding.show(.permissions) },
                                 showSettings: { settings.show() },

@@ -30,6 +30,9 @@ Prefer the mouse? Hover the island to open it, move the cursor away to close it.
 - **Pause When the Island Closes** (off by default, in the menu and Settings → General): the
   video plays only while the island is open. It pauses when the island tucks in and plays again
   when it opens; a video you paused yourself stays paused.
+- **Pause When You Step Away** (on by default, in the menu and Settings → General): with the
+  glance on, nobody in front of the camera for 3 seconds pauses the video, and it plays again
+  when you're back. A video you paused yourself stays paused.
 - The island grows out of the notch when Picture in Picture starts and tucks back into it when
   it ends; a soft glow in the video's colors sits under the open island (Settings → General).
 

@@ -11,16 +11,18 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private let gaze: GazeController
     private let glow: AmbientGlow
     private let collapsePause: CollapsePause
+    private let awayPause: AwayPause
     private let updates: Updates
     private let calibrate: () -> Void
     private var window: NSWindow?
     private var tabs: NSTabViewController?
 
-    init(gaze: GazeController, glow: AmbientGlow, collapsePause: CollapsePause, updates: Updates,
+    init(gaze: GazeController, glow: AmbientGlow, collapsePause: CollapsePause, awayPause: AwayPause, updates: Updates,
          calibrate: @escaping () -> Void) {
         self.gaze = gaze
         self.glow = glow
         self.collapsePause = collapsePause
+        self.awayPause = awayPause
         self.updates = updates
         self.calibrate = calibrate
     }
@@ -43,7 +45,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private func makeWindow() {
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
-        tabs.addTabViewItem(item("General", symbol: "gearshape", GeneralPane(glow: glow, collapsePause: collapsePause, updates: updates)))
+        tabs.addTabViewItem(item("General", symbol: "gearshape", GeneralPane(glow: glow, collapsePause: collapsePause, awayPause: awayPause, updates: updates)))
         tabs.addTabViewItem(item("Gaze", symbol: "eye", GazePane(gaze: gaze, calibrate: { [weak self] in
             self?.window?.close()
             self?.calibrate()
@@ -75,6 +77,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 private struct GeneralPane: View {
     @ObservedObject var glow: AmbientGlow
     @ObservedObject var collapsePause: CollapsePause
+    @ObservedObject var awayPause: AwayPause
     let updates: Updates
     @State private var checksForUpdates = true
     @State private var accessibility = Permissions.accessibility
@@ -99,6 +102,10 @@ private struct GeneralPane: View {
                 Toggle(isOn: $collapsePause.isEnabled) {
                     Text("Pause when the island closes")
                     Text("The video plays only while the island is open. A video you paused stays paused.")
+                }
+                Toggle(isOn: $awayPause.isEnabled) {
+                    Text("Pause when you step away")
+                    Text("With the glance on, nobody in front of the camera for 3 seconds pauses the video. It plays again when you're back.")
                 }
             }
             if updates.isAvailable {
