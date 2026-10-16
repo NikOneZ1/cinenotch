@@ -10,6 +10,10 @@ final class IslandController: ObservableObject {
     @Published private(set) var metrics: IslandMetrics
     /// Keeps the island expanded regardless of input (used by gaze calibration).
     var forceExpanded = false { didSet { refreshExpanded() } }
+    /// Someone is behind the user: the island hides in the notch while the video stays docked.
+    var isTuckedAway = false {
+        didSet { if isTuckedAway != oldValue { setVisible(pip.isActive && !isTuckedAway) } }
+    }
     /// Calibration and the gaze test script the island; a cursor resting over it must not interfere.
     var ignoresMouse = false {
         didSet {
@@ -72,7 +76,10 @@ final class IslandController: ObservableObject {
         pip.capture.onFrame = { [weak self] surface in self?.sink.push(surface) }
         pip.$isActive
             .removeDuplicates()
-            .sink { [weak self] active in self?.setVisible(active) }
+            .sink { [weak self] active in
+                guard let self else { return }
+                setVisible(active && !isTuckedAway)
+            }
             .store(in: &cancellables)
         pip.$isPlaying
             .removeDuplicates()

@@ -12,17 +12,20 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private let glow: AmbientGlow
     private let collapsePause: CollapsePause
     private let awayPause: AwayPause
+    private let onlookerHide: OnlookerHide
     private let updates: Updates
     private let calibrate: () -> Void
     private var window: NSWindow?
     private var tabs: NSTabViewController?
 
-    init(gaze: GazeController, glow: AmbientGlow, collapsePause: CollapsePause, awayPause: AwayPause, updates: Updates,
+    init(gaze: GazeController, glow: AmbientGlow, collapsePause: CollapsePause, awayPause: AwayPause,
+         onlookerHide: OnlookerHide, updates: Updates,
          calibrate: @escaping () -> Void) {
         self.gaze = gaze
         self.glow = glow
         self.collapsePause = collapsePause
         self.awayPause = awayPause
+        self.onlookerHide = onlookerHide
         self.updates = updates
         self.calibrate = calibrate
     }
@@ -45,7 +48,9 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private func makeWindow() {
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
-        tabs.addTabViewItem(item("General", symbol: "gearshape", GeneralPane(glow: glow, collapsePause: collapsePause, awayPause: awayPause, updates: updates)))
+        let general = GeneralPane(glow: glow, collapsePause: collapsePause, awayPause: awayPause,
+                                  onlookerHide: onlookerHide, updates: updates)
+        tabs.addTabViewItem(item("General", symbol: "gearshape", general))
         tabs.addTabViewItem(item("Gaze", symbol: "eye", GazePane(gaze: gaze, calibrate: { [weak self] in
             self?.window?.close()
             self?.calibrate()
@@ -78,6 +83,7 @@ private struct GeneralPane: View {
     @ObservedObject var glow: AmbientGlow
     @ObservedObject var collapsePause: CollapsePause
     @ObservedObject var awayPause: AwayPause
+    @ObservedObject var onlookerHide: OnlookerHide
     let updates: Updates
     @State private var checksForUpdates = true
     @State private var accessibility = Permissions.accessibility
@@ -106,6 +112,10 @@ private struct GeneralPane: View {
                 Toggle(isOn: $awayPause.isEnabled) {
                     Text("Pause when you step away")
                     Text("With the glance on, nobody in front of the camera for 3 seconds pauses the video. It plays again when you're back.")
+                }
+                Toggle(isOn: $onlookerHide.isEnabled) {
+                    Text("Hide when someone's behind you")
+                    Text("With the glance on, a second face near the camera tucks the island into the notch and pauses the video. Open it again once they're gone.")
                 }
             }
             if updates.isAvailable {

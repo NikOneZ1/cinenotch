@@ -57,6 +57,9 @@ final class GazeController: ObservableObject {
     /// The stored calibration (if any) has been read after launch, so `isCalibrated` can be trusted.
     @Published private(set) var hasLoadedCalibration = false
     @Published private(set) var isCameraRunning = false
+    /// Widths of the faces near the camera (fractions of the image), largest first, from the
+    /// last face detection, which runs a few times a second.
+    @Published private(set) var nearbyFaces: [CGFloat] = []
 
     var isPiPActive = false { didSet { updateCamera() } }
     var isCalibrating = false { didSet { updateCamera() } }
@@ -104,7 +107,8 @@ final class GazeController: ObservableObject {
         let analyzer = FaceAnalyzer()
         camera.onFrame = { [weak self] pixelBuffer in
             let features = analyzer.analyze(pixelBuffer)
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.handle(features) } }
+            let nearbyFaces = analyzer.nearbyFaces
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.handle(features, nearbyFaces: nearbyFaces) } }
         }
         installActivityMonitors()
     }
@@ -184,6 +188,7 @@ final class GazeController: ObservableObject {
         } else if !shouldRun, isCameraRunning {
             camera.stop()
             isCameraRunning = false
+            nearbyFaces = []
             resetTrackers()
             Log.info("gaze: camera off")
         }
@@ -231,8 +236,10 @@ final class GazeController: ObservableObject {
 
     // MARK: Frames
 
-    private func handle(_ frame: GazeFeatures?) {
+    private func handle(_ frame: GazeFeatures?, nearbyFaces: [CGFloat]) {
         guard isCameraRunning else { return }
+        // Before `features`: watchers of the frames read the faces along with them.
+        if nearbyFaces != self.nearbyFaces { self.nearbyFaces = nearbyFaces }
         features = frame
         if isCalibrating {
             calibrationSink?(frame)

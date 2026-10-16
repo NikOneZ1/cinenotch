@@ -46,6 +46,11 @@ final class FaceAnalyzer: @unchecked Sendable {
     }()
     /// Also how often Vision's own pitch/yaw refresh.
     private let redetectEvery = 5
+    /// Smallest face box (a fraction of the image width) that is someone near the camera rather
+    /// than a face on a poster across the room.
+    private static let nearbyMinWidth: CGFloat = 0.07
+    /// Widths of the faces near the camera at the last detection, largest first.
+    private(set) var nearbyFaces: [CGFloat] = []
     private var tracked: VNFaceObservation?
     private var detected: VNFaceObservation?
     /// Where the landmarks' centroid sits inside a freshly detected face box (box-normalized).
@@ -58,7 +63,9 @@ final class FaceAnalyzer: @unchecked Sendable {
             var face = tracked
             if face == nil || framesSinceDetection >= redetectEvery {
                 try handler.perform([faces])
-                guard let found = faces.results?.max(by: { $0.boundingBox.width < $1.boundingBox.width }) else {
+                let all = faces.results ?? []
+                nearbyFaces = all.map(\.boundingBox.width).filter { $0 >= Self.nearbyMinWidth }.sorted(by: >)
+                guard let found = all.max(by: { $0.boundingBox.width < $1.boundingBox.width }) else {
                     tracked = nil
                     return nil
                 }

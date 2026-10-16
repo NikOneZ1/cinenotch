@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings: SettingsWindow?
     private var collapsePause: CollapsePause?
     private var awayPause: AwayPause?
+    private var onlookerHide: OnlookerHide?
     private var cancellables = Set<AnyCancellable>()
     private var signalSources: [DispatchSourceSignal] = []
     private var started = false
@@ -44,8 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.collapsePause = collapsePause
         let awayPause = AwayPause(pip: pip, island: island, gaze: gaze)
         self.awayPause = awayPause
+        let onlookerHide = OnlookerHide(pip: pip, island: island, gaze: gaze)
+        self.onlookerHide = onlookerHide
         let settings = SettingsWindow(gaze: gaze, glow: island.glow, collapsePause: collapsePause, awayPause: awayPause,
-                                      updates: updates,
+                                      onlookerHide: onlookerHide, updates: updates,
                                       calibrate: { calibrator.start() })
         self.settings = settings
         let onboarding = Onboarding()
@@ -64,7 +67,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { visible in visible ? hud.show() : hud.hide() }
             .store(in: &cancellables)
 
-        statusMenu = StatusMenu(pip: pip, gaze: gaze, collapsePause: collapsePause, awayPause: awayPause, updates: updates,
+        statusMenu = StatusMenu(pip: pip, gaze: gaze, collapsePause: collapsePause, awayPause: awayPause,
+                                onlookerHide: onlookerHide, updates: updates,
                                 thumbnail: { [weak island] in island?.thumbnail() },
                                 showPermissions: { onboarding.show(.permissions) },
                                 showSettings: { settings.show() },

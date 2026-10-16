@@ -33,6 +33,11 @@ Prefer the mouse? Hover the island to open it, move the cursor away to close it.
 - **Pause When You Step Away** (on by default, in the menu and Settings → General): with the
   glance on, nobody in front of the camera for 3 seconds pauses the video, and it plays again
   when you're back. A video you paused yourself stays paused.
+- **Hide When Someone's Behind You** (on by default, in the menu and Settings → General): with
+  the glance on, a second face near the camera tucks the island into the notch and pauses the
+  video. When it's just you again, the island comes back and the video plays once you open it.
+  Someone who stays for a minute is probably watching along, so the island comes back and stays
+  until they've left.
 - The island grows out of the notch when Picture in Picture starts and tucks back into it when
   it ends; a soft glow in the video's colors sits under the open island (Settings → General).
 

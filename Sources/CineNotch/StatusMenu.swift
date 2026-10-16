@@ -11,6 +11,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let gaze: GazeController
     private let collapsePause: CollapsePause
     private let awayPause: AwayPause
+    private let onlookerHide: OnlookerHide
     private let updates: Updates
     private let thumbnail: () -> CGImage?
     private let showPermissions: () -> Void
@@ -19,7 +20,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let testGaze: () -> Void
     private var cancellables = Set<AnyCancellable>()
 
-    init(pip: PiPController, gaze: GazeController, collapsePause: CollapsePause, awayPause: AwayPause, updates: Updates,
+    init(pip: PiPController, gaze: GazeController, collapsePause: CollapsePause, awayPause: AwayPause,
+         onlookerHide: OnlookerHide, updates: Updates,
          thumbnail: @escaping () -> CGImage?,
          showPermissions: @escaping () -> Void, showSettings: @escaping () -> Void,
          calibrate: @escaping () -> Void, testGaze: @escaping () -> Void) {
@@ -27,6 +29,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         self.gaze = gaze
         self.collapsePause = collapsePause
         self.awayPause = awayPause
+        self.onlookerHide = onlookerHide
         self.updates = updates
         self.thumbnail = thumbnail
         self.showPermissions = showPermissions
@@ -74,6 +77,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let awayItem = makeItem("Pause When You Step Away", #selector(togglePausesWhenAway), symbol: "figure.walk")
         awayItem.state = awayPause.isEnabled ? .on : .off
         menu.addItem(awayItem)
+        let onlookerItem = makeItem("Hide When Someone's Behind You", #selector(toggleHidesForOnlookers), symbol: "person.2")
+        onlookerItem.state = onlookerHide.isEnabled ? .on : .off
+        menu.addItem(onlookerItem)
 
         menu.addItem(.separator())
         let pauseItem = makeItem("Pause When the Island Closes", #selector(togglePausesWhenCollapsed), symbol: "pause.circle")
@@ -166,6 +172,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     @objc private func toggleHUD() { gaze.isHUDVisible.toggle() }
     @objc private func togglePausesWhenCollapsed() { collapsePause.isEnabled.toggle() }
     @objc private func togglePausesWhenAway() { awayPause.isEnabled.toggle() }
+    @objc private func toggleHidesForOnlookers() { onlookerHide.isEnabled.toggle() }
 
     @objc private func openLogs() {
         NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs"))
