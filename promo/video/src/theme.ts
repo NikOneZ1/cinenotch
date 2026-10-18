@@ -30,6 +30,8 @@ export const footage = {
   new: { file: "new.webm", width: 1560, height: 1094 },
   /** The "keys" scene of 0.6.0: ⌃⌥⌘O, scrolling, ⌃⌥⌘P (`--debug-demo-scene keys`). */
   keys: { file: "keys.webm", width: 1560, height: 1094 },
+  /** The "sizes" scene of 0.7.0: pinches and ⌃⌥⌘= / ⌃⌥⌘− (`--debug-demo-scene sizes`). */
+  sizes: { file: "sizes.webm", width: 1860, height: 1304 },
 } as const;
 
 export type Version = keyof typeof footage;

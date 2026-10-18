@@ -11,10 +11,14 @@ import AppKit
 /// The "keys" scene (`--debug-demo-scene keys`): 0.5 Picture in Picture starts, 2.5 ⌃⌥⌘O opens
 /// the island, 4.0–4.9 a scroll forward in four steps, 6.6–6.9 a scroll back in two, 8.6 ⌃⌥⌘P
 /// pauses, 10.0 ⌃⌥⌘P plays, 11.4 ⌃⌥⌘O closes the island, 13.0 the end.
+///
+/// The "sizes" scene, from the medium size: 0.3 Picture in Picture starts, 1.2 the island opens,
+/// 2.6 a pinch out (large), 4.6 and 6.4 pinches in (medium, small), 8.4 and 10.0 ⌃⌥⌘= (medium,
+/// large), 11.8 ⌃⌥⌘− (medium), 13.4 the end.
 @MainActor
 enum DemoScript {
     static func run(pip: PiPController, island: IslandController, recordTo url: URL?) {
-        let keys = LaunchOptions.current.debugDemoScene == "keys"
+        let scene = LaunchOptions.current.debugDemoScene
         Task {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             let recorder = url.map(WindowRecorder.init(url:))
@@ -31,7 +35,21 @@ enum DemoScript {
                 if wait > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1e9)) }
                 action()
             }
-            if keys {
+            if scene == "sizes" {
+                await at(0.3) { pip.setFakeActive(true) }
+                await at(1.2) { island.forceExpanded = true }
+                await at(2.6) { island.stepVideoSize(bigger: true) }
+                await at(4.6) { island.stepVideoSize(bigger: false) }
+                await at(6.4) { island.stepVideoSize(bigger: false) }
+                await at(8.4) { island.stepVideoSize(bigger: true) }
+                await at(10.0) { island.stepVideoSize(bigger: true) }
+                await at(11.8) { island.stepVideoSize(bigger: false) }
+                await at(13.4) {}
+                await recorder?.stop()
+                if recorder != nil { NSApp.terminate(nil) }
+                return
+            }
+            if scene == "keys" {
                 await at(0.5) { pip.setFakeActive(true) }
                 await at(2.5) { island.toggleFromKeyboard() }
                 for time in [4.0, 4.3, 4.6, 4.9] {

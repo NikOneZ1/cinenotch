@@ -22,7 +22,7 @@ struct LaunchOptions {
     var debugWindowsDir: URL?
     /// Play a fixed scene on the fake video (see DemoScript).
     var debugDemo = false
-    /// `--debug-demo-scene <name>`: which scene the demo plays, "tour" (the default) or "keys".
+    /// `--debug-demo-scene <name>`: which scene the demo plays, "tour" (the default), "keys" or "sizes".
     var debugDemoScene = "tour"
     /// With `debugDemo`: record the island window into this movie, then quit.
     var debugRecordURL: URL?
