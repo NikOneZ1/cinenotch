@@ -13,6 +13,8 @@ final class Onboarding: NSObject, NSWindowDelegate {
     var onPermissionsGranted: () -> Void = {}
     /// "Set up" on the last step: calibrate gaze.
     var onSetUpGlance: () -> Void = {}
+    /// The last step's "Open at login" checkbox, applied when onboarding ends.
+    var onOpenAtLogin: (Bool) -> Void = { _ in }
 
     static var isDone: Bool { UserDefaults.standard.bool(forKey: doneKey) }
     /// Where to pick up after the relaunch that Screen Recording needs.
@@ -34,6 +36,7 @@ final class Onboarding: NSObject, NSWindowDelegate {
         }
         model.onDone = { [weak self] setUpGlance in
             UserDefaults.standard.set(true, forKey: Self.doneKey)
+            if let self { onOpenAtLogin(model.opensAtLogin) }
             self?.window?.close()
             if setUpGlance { self?.onSetUpGlance() }
         }
@@ -74,6 +77,7 @@ final class OnboardingModel: ObservableObject {
     @Published var step = Onboarding.Step.welcome
     @Published private(set) var accessibility = Permissions.accessibility
     @Published private(set) var screenRecording = Permissions.screenRecording
+    @Published var opensAtLogin = true
     var onPermissionsGranted: () -> Void = {}
     var onRelaunch: () -> Void = {}
     var onDone: (_ setUpGlance: Bool) -> Void = { _ in }
@@ -284,6 +288,9 @@ private struct ReadyStep: View {
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.card))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hairline))
             Spacer(minLength: 0)
+            Toggle("Open CineNotch at login", isOn: $model.opensAtLogin)
+                .toggleStyle(.checkbox)
+                .font(.system(size: 13))
             Button("Done") { model.onDone(false) }
                 .buttonStyle(AccentButtonStyle())
                 .keyboardShortcut(.defaultAction)

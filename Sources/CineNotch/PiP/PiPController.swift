@@ -49,6 +49,8 @@ final class PiPController: ObservableObject {
 
     let capture = PiPCapture()
     private let nowPlaying = NowPlaying()
+    /// The last seek in Chrome's video and when it was sent.
+    private var lastSeek: (target: Double, time: TimeInterval)?
     /// Size the PiP window is set to when docked; the island shows the video at this size.
     var dockedVideoSize: (_ aspect: CGFloat) -> CGSize = { CGSize(width: 560, height: 560 / $0) }
 
@@ -138,11 +140,16 @@ final class PiPController: ObservableObject {
         guard features.skip else { return }
         if source == .chrome {
             guard let media = chromeMedia else { return }
-            var target = max(media.position() + (forward ? 10 : -10), 0)
+            // Steps in a row (a scroll) build on the last target: Now Playing reports the new
+            // position a moment later.
+            let now = ProcessInfo.processInfo.systemUptime
+            let start = lastSeek.flatMap { now - $0.time < 1.5 ? $0.target : nil } ?? media.position()
+            var target = max(start + (forward ? 10 : -10), 0)
             if let duration = media.duration {
                 target = min(target, duration)
                 progress = target / duration
             }
+            lastSeek = (target, now)
             nowPlaying.seek(to: target)
             return
         }

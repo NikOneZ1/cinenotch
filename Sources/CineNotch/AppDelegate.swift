@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let pip = PiPController()
     private let gaze = GazeController()
     private let updates = Updates()
+    private let loginItem = LoginItem()
+    private var hotKeys: HotKeys?
     private var island: IslandController?
     private var calibrator: GazeCalibrator?
     private var glanceInvite: GlanceInvite?
@@ -47,12 +49,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.awayPause = awayPause
         let onlookerHide = OnlookerHide(pip: pip, island: island, gaze: gaze)
         self.onlookerHide = onlookerHide
+        let hotKeys = HotKeys()
+        hotKeys.perform = { [weak self, weak island] action in
+            guard let self, pip.isActive else { return }
+            switch action {
+            case .togglePlay: pip.togglePlay()
+            case .skipBack: pip.skip(forward: false)
+            case .skipForward: pip.skip(forward: true)
+            case .toggleIsland: island?.toggleFromKeyboard()
+            }
+        }
+        self.hotKeys = hotKeys
         let settings = SettingsWindow(gaze: gaze, glow: island.glow, collapsePause: collapsePause, awayPause: awayPause,
-                                      onlookerHide: onlookerHide, updates: updates,
+                                      onlookerHide: onlookerHide, loginItem: loginItem, hotKeys: hotKeys, updates: updates,
                                       calibrate: { calibrator.start() })
         self.settings = settings
         let onboarding = Onboarding()
         onboarding.onPermissionsGranted = { [weak self] in self?.startEngine() }
+        onboarding.onOpenAtLogin = { [loginItem] open in if open != loginItem.isEnabled { loginItem.set(open) } }
         onboarding.onSetUpGlance = { [weak self] in
             self?.gaze.isEnabled = true
             calibrator.start()
@@ -128,7 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await snap(onboarding.windowNumber, "onboarding-\(step)")
         }
         onboarding.close()
-        for tab in [SettingsWindow.Tab.general, .about] {
+        for tab in [SettingsWindow.Tab.general, .keyboard, .about] {
             settings.show(tab)
             await snap(settings.windowNumber, "settings-\(tab)")
         }

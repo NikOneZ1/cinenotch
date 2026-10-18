@@ -58,6 +58,17 @@ struct IslandView: View {
                     .opacity(pip.features.progress ? Double(motion[.barAlpha]) : 0)
                     .placed(x: centerX + motion[.barX], y: top + motion[.barY], width: motion[.barW], height: motion[.barH])
 
+                if expanded, let scrubbed = island.scrubbed {
+                    Text(scrubbed == 0 ? "0 s" : scrubbed > 0 ? "+\(scrubbed) s" : "−\(-scrubbed) s")
+                        .font(.system(size: 15, weight: .bold).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(Color.black.opacity(0.6)))
+                        .position(x: video.midX, y: video.midY)
+                        .transition(.opacity)
+                }
+
                 if expanded, let marker = island.videoMarker {
                     VideoMarker(progress: island.videoMarkerProgress)
                         .position(x: video.minX + video.width * marker.x, y: video.minY + video.height * marker.y)
@@ -70,6 +81,7 @@ struct IslandView: View {
             }
             .opacity(Double(content))
             .clipShape(outline)
+            .animation(.easeOut(duration: 0.15), value: island.scrubbed == nil)
 
             let eyes = motion[.eyes]
             if eyes > 0.02 {

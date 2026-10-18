@@ -3,29 +3,34 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// Settings: General (permissions, the glow, pausing, updates), Gaze (camera preview, sensitivity, calibration), About.
+/// Settings: General (permissions, startup, the island, updates), Gaze (camera preview, sensitivity,
+/// calibration), Keyboard (shortcuts), About.
 @MainActor
 final class SettingsWindow: NSObject, NSWindowDelegate {
-    enum Tab: Int { case general, gaze, about }
+    enum Tab: Int { case general, gaze, keyboard, about }
 
     private let gaze: GazeController
     private let glow: AmbientGlow
     private let collapsePause: CollapsePause
     private let awayPause: AwayPause
     private let onlookerHide: OnlookerHide
+    private let loginItem: LoginItem
+    private let hotKeys: HotKeys
     private let updates: Updates
     private let calibrate: () -> Void
     private var window: NSWindow?
     private var tabs: NSTabViewController?
 
     init(gaze: GazeController, glow: AmbientGlow, collapsePause: CollapsePause, awayPause: AwayPause,
-         onlookerHide: OnlookerHide, updates: Updates,
+         onlookerHide: OnlookerHide, loginItem: LoginItem, hotKeys: HotKeys, updates: Updates,
          calibrate: @escaping () -> Void) {
         self.gaze = gaze
         self.glow = glow
         self.collapsePause = collapsePause
         self.awayPause = awayPause
         self.onlookerHide = onlookerHide
+        self.loginItem = loginItem
+        self.hotKeys = hotKeys
         self.updates = updates
         self.calibrate = calibrate
     }
@@ -49,12 +54,13 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
         let general = GeneralPane(glow: glow, collapsePause: collapsePause, awayPause: awayPause,
-                                  onlookerHide: onlookerHide, updates: updates)
+                                  onlookerHide: onlookerHide, loginItem: loginItem, updates: updates)
         tabs.addTabViewItem(item("General", symbol: "gearshape", general))
         tabs.addTabViewItem(item("Gaze", symbol: "eye", GazePane(gaze: gaze, calibrate: { [weak self] in
             self?.window?.close()
             self?.calibrate()
         })))
+        tabs.addTabViewItem(item("Keyboard", symbol: "keyboard", KeyboardPane(hotKeys: hotKeys)))
         tabs.addTabViewItem(item("About", symbol: "info.circle", AboutPane()))
         let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable]
@@ -84,6 +90,7 @@ private struct GeneralPane: View {
     @ObservedObject var collapsePause: CollapsePause
     @ObservedObject var awayPause: AwayPause
     @ObservedObject var onlookerHide: OnlookerHide
+    @ObservedObject var loginItem: LoginItem
     let updates: Updates
     @State private var checksForUpdates = true
     @State private var accessibility = Permissions.accessibility
@@ -99,6 +106,20 @@ private struct GeneralPane: View {
                 PermissionCard(symbol: "rectangle.dashed.badge.record", title: "Screen Recording",
                                detail: "Shows the video in the island. macOS applies it after a relaunch.",
                                granted: screenRecording, action: Permissions.requestScreenRecording, isCard: false)
+            }
+            Section("Startup") {
+                Toggle(isOn: Binding(get: { loginItem.isEnabled || loginItem.needsApproval }, set: { loginItem.set($0) })) {
+                    Text("Open at login")
+                    Text("CineNotch starts with your Mac, so it's there when a video goes into Picture in Picture.")
+                }
+                if loginItem.needsApproval {
+                    HStack {
+                        Text("macOS keeps it off until you allow CineNotch in Login Items.")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Open Login Items") { loginItem.openSystemSettings() }
+                    }
+                }
             }
             Section("Island") {
                 Toggle(isOn: $glow.isEnabled) {
@@ -136,9 +157,45 @@ private struct GeneralPane: View {
         .fixedSize(horizontal: false, vertical: true)
         .onAppear { checksForUpdates = updates.automaticallyChecks }
         .onReceive(poll) { _ in
+            loginItem.refresh()
             accessibility = Permissions.accessibility
             screenRecording = Permissions.screenRecording
         }
+    }
+}
+
+// MARK: Keyboard
+
+private struct KeyboardPane: View {
+    @ObservedObject var hotKeys: HotKeys
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(isOn: $hotKeys.isEnabled) {
+                    Text("Keyboard shortcuts")
+                    Text("They work from any app while a video is docked.")
+                }
+                if hotKeys.isEnabled {
+                    ForEach(HotKeys.Action.allCases, id: \.self) { action in
+                        LabeledContent(action.title) {
+                            Text(action.shortcut)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            Section("Trackpad and mouse") {
+                LabeledContent("Move the video") {
+                    Text("Scroll over the open video")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 480)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

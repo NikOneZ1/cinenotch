@@ -26,7 +26,11 @@ Prefer the mouse? Hover the island to open it, move the cursor away to close it.
 
 - **Collapsed:** a black pill with a live thumbnail, the video title and a progress ring.
 - **Open:** the video at full size with play/pause, ±10 s, back-to-the-browser and close
-  buttons (no close for Chrome's video).
+  buttons (no close for Chrome's video). Scroll over it (two fingers, or the mouse wheel) to move
+  it in 10 s steps.
+- **Keyboard shortcuts** from any app (Settings → Keyboard turns them off): ⌃⌥⌘P play or
+  pause, ⌃⌥⌘[ and ⌃⌥⌘] back or forward 10 s, ⌃⌥⌘O open the island and keep it open, or close
+  it.
 - **Pause When the Island Closes** (off by default, in the menu and Settings → General): the
   video plays only while the island is open. It pauses when the island tucks in and plays again
   when it opens; a video you paused yourself stays paused.
@@ -41,7 +45,7 @@ Prefer the mouse? Hover the island to open it, move the cursor away to close it.
 - The island grows out of the notch when Picture in Picture starts and tucks back into it when
   it ends; a soft glow in the video's colors sits under the open island (Settings → General).
 
-Status: early (0.1.0). Safari and Chrome, one screen.
+Status: early. Safari and Chrome, one screen.
 
 ## Download
 
@@ -61,7 +65,8 @@ A short onboarding asks for two permissions:
 - **Screen Recording**: to show the PiP video in the island. Only the PiP window is captured,
   and nothing leaves the Mac. macOS applies this permission after the app restarts.
 
-Then start Picture in Picture on any video in Safari or Chrome.
+Its last step also asks whether CineNotch should open at login (Settings → General → **Open
+at login**). Then start Picture in Picture on any video in Safari or Chrome.
 
 ### The glance
 

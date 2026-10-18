@@ -25,6 +25,8 @@ final class IslandController: ObservableObject {
     /// A target dot on the expanded video (calibration, gaze test), relative to the video (0...1, y down).
     @Published var videoMarker: CGPoint?
     @Published var videoMarkerProgress = 0.0
+    /// Seconds a scroll over the open video just moved it, shown on the video for a moment.
+    @Published private(set) var scrubbed: Int?
 
     let motion: IslandMotion
     let glow = AmbientGlow()
@@ -33,6 +35,8 @@ final class IslandController: ObservableObject {
     private let expandDelay: TimeInterval = 0.06
     /// Time outside the island before collapsing.
     private let collapseDelay: TimeInterval = 0.3
+    /// Trackpad scroll distance (points) per 10 s step.
+    private let scrollStep: CGFloat = 40
 
     private let pip: PiPController
     private let options: LaunchOptions
@@ -46,6 +50,10 @@ final class IslandController: ObservableObject {
     private var pendingClear: DispatchWorkItem?
     private var mouseWantsExpanded = false
     private var gazeWantsExpanded = false
+    /// Opened with the keyboard shortcut: stays open until the shortcut closes it or the video goes.
+    private var keyboardWantsExpanded = false
+    private var scrollDistance: CGFloat = 0
+    private var pendingScrubbedClear: DispatchWorkItem?
     private var debugCycleStep = 0
     private var cancellables = Set<AnyCancellable>()
 
@@ -103,6 +111,7 @@ final class IslandController: ObservableObject {
             addTimer(interval: 3 / motion.timeScale) { [weak self] in self?.debugCycle() }
         } else if !options.debugDemo {
             installMouseTracking()
+            installScrollSeeking()
         }
         Log.info("island started, metrics=\(metrics)")
     }
@@ -177,6 +186,7 @@ final class IslandController: ObservableObject {
         }
         isVisible = visible
         isExpanded = false
+        keyboardWantsExpanded = false
         if visible { motion.appear() } else { motion.disappear() }
         refreshExpanded()
         panel?.ignoresMouseEvents = true
@@ -192,7 +202,7 @@ final class IslandController: ObservableObject {
 
     /// The island is expanded while any input wants it: the cursor, a glance, or calibration.
     private func refreshExpanded() {
-        setExpanded(isVisible && (mouseWantsExpanded || gazeWantsExpanded || forceExpanded))
+        setExpanded(isVisible && (mouseWantsExpanded || gazeWantsExpanded || keyboardWantsExpanded || forceExpanded))
     }
 
     private func setExpanded(_ expanded: Bool) {
@@ -217,6 +227,17 @@ final class IslandController: ObservableObject {
         motion.snap(visible: isVisible, expanded: isExpanded)
         panel?.setFrame(metrics.panelFrame(), display: true)
         Log.info("screen changed, metrics=\(metrics)")
+    }
+
+    /// The keyboard shortcut: opens the island and keeps it open, or closes it.
+    func toggleFromKeyboard() {
+        guard isVisible, !ignoresMouse else { return }
+        keyboardWantsExpanded = !isExpanded
+        if !keyboardWantsExpanded {
+            cancelPending()
+            mouseWantsExpanded = false
+        }
+        refreshExpanded()
     }
 
     // MARK: Mouse
@@ -289,6 +310,52 @@ final class IslandController: ObservableObject {
                 DispatchQueue.main.asyncAfter(deadline: .now() + collapseDelay, execute: work)
             }
         }
+    }
+
+    // MARK: Scrolling
+
+    /// Two fingers (or the wheel) over the open video move it in 10 s steps.
+    private func installScrollSeeking() {
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel, handler: { [weak self] event in
+            MainActor.assumeIsolated { self?.scrolled(event) }
+        }) {
+            monitors.append(monitor)
+        }
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel, handler: { [weak self] event in
+            MainActor.assumeIsolated { self?.scrolled(event) }
+            return event
+        }) {
+            monitors.append(monitor)
+        }
+    }
+
+    private func scrolled(_ event: NSEvent) {
+        guard isVisible, isExpanded, !ignoresMouse, pip.features.skip,
+              expandedRectOnScreen().contains(NSEvent.mouseLocation) else { return }
+        if event.phase == .began { scrollDistance = 0 }
+        // The glide after a flick would run far past where the fingers stopped.
+        guard event.momentumPhase.isEmpty else { return }
+        // Fingers to the right or down (the wheel turned towards you) go forward, whatever the
+        // scroll direction setting.
+        let sign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+        let dx = event.scrollingDeltaX * sign, dy = event.scrollingDeltaY * sign
+        let delta = abs(dx) >= abs(dy) ? dx : dy
+        guard delta != 0 else { return }
+        let steps: Int
+        if event.hasPreciseScrollingDeltas {
+            scrollDistance += delta
+            steps = Int(scrollDistance / scrollStep)
+            scrollDistance -= CGFloat(steps) * scrollStep
+        } else {
+            steps = delta > 0 ? 1 : -1
+        }
+        guard steps != 0 else { return }
+        for _ in 0..<abs(steps) { pip.skip(forward: steps > 0) }
+        scrubbed = (scrubbed ?? 0) + steps * 10
+        pendingScrubbedClear?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.scrubbed = nil }
+        pendingScrubbedClear = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: work)
     }
 
     private func cancelPending() {
