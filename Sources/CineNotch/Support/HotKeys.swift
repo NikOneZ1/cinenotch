@@ -7,7 +7,7 @@ import Foundation
 @MainActor
 final class HotKeys: ObservableObject {
     enum Action: UInt32, CaseIterable {
-        case togglePlay = 1, skipBack, skipForward, toggleIsland
+        case togglePlay = 1, skipBack, skipForward, toggleIsland, bigger, smaller
 
         var title: String {
             switch self {
@@ -15,6 +15,8 @@ final class HotKeys: ObservableObject {
             case .skipBack: return "Back 10 seconds"
             case .skipForward: return "Forward 10 seconds"
             case .toggleIsland: return "Open or close the island"
+            case .bigger: return "Bigger video"
+            case .smaller: return "Smaller video"
             }
         }
 
@@ -25,6 +27,8 @@ final class HotKeys: ObservableObject {
             case .skipBack: return kVK_ANSI_LeftBracket
             case .skipForward: return kVK_ANSI_RightBracket
             case .toggleIsland: return kVK_ANSI_O
+            case .bigger: return kVK_ANSI_Equal
+            case .smaller: return kVK_ANSI_Minus
             }
         }
 
@@ -35,6 +39,8 @@ final class HotKeys: ObservableObject {
             case .skipBack: key = "["
             case .skipForward: key = "]"
             case .toggleIsland: key = "O"
+            case .bigger: key = "="
+            case .smaller: key = "−"
             }
             return "⌃⌥⌘" + key
         }

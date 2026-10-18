@@ -294,6 +294,20 @@ final class PiPController: ObservableObject {
     }
 
     private func dockWindow(_ window: AXUIElement) {
+        fit(window)
+        isActive = true
+        startCapture()
+    }
+
+    /// The island's video size changed: the docked window takes the new size, so the capture
+    /// stays sharp.
+    func resizeDocked() {
+        guard isActive, !isReleased, let window else { return }
+        fit(window)
+    }
+
+    /// Sizes the window for the island and parks it.
+    private func fit(_ window: AXUIElement) {
         if let size = AX.size(window), size.height > 0 {
             // Chrome keeps its window inside the screen while resizing, so it first goes
             // where there's room for the new size.
@@ -302,8 +316,6 @@ final class PiPController: ObservableObject {
         }
         AX.setPosition(window, Parking.point())
         if let size = AX.size(window) { updateSize(size) }
-        isActive = true
-        startCapture()
     }
 
     private func detach() {

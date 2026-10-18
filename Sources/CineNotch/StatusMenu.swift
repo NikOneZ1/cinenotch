@@ -9,6 +9,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let pip: PiPController
     private let gaze: GazeController
+    private let island: IslandController
     private let collapsePause: CollapsePause
     private let awayPause: AwayPause
     private let onlookerHide: OnlookerHide
@@ -20,13 +21,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let testGaze: () -> Void
     private var cancellables = Set<AnyCancellable>()
 
-    init(pip: PiPController, gaze: GazeController, collapsePause: CollapsePause, awayPause: AwayPause,
+    init(pip: PiPController, gaze: GazeController, island: IslandController, collapsePause: CollapsePause, awayPause: AwayPause,
          onlookerHide: OnlookerHide, updates: Updates,
          thumbnail: @escaping () -> CGImage?,
          showPermissions: @escaping () -> Void, showSettings: @escaping () -> Void,
          calibrate: @escaping () -> Void, testGaze: @escaping () -> Void) {
         self.pip = pip
         self.gaze = gaze
+        self.island = island
         self.collapsePause = collapsePause
         self.awayPause = awayPause
         self.onlookerHide = onlookerHide
@@ -85,6 +87,16 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let pauseItem = makeItem("Pause When the Island Closes", #selector(togglePausesWhenCollapsed), symbol: "pause.circle")
         pauseItem.state = collapsePause.isEnabled ? .on : .off
         menu.addItem(pauseItem)
+        let sizes = NSMenu()
+        for size in IslandVideoSize.allCases {
+            let item = makeItem(size.title, #selector(selectVideoSize(_:)))
+            item.representedObject = size.rawValue
+            item.state = size == island.videoSize ? .on : .off
+            sizes.addItem(item)
+        }
+        let sizeItem = makeItem("Video Size", nil, symbol: "arrow.up.left.and.arrow.down.right")
+        sizeItem.submenu = sizes
+        menu.addItem(sizeItem)
         if pip.hasWindow {
             if pip.isReleased {
                 menu.addItem(makeItem("Put the Video Back in the Island", #selector(dockWindow), symbol: "pip.enter"))
@@ -171,6 +183,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
     @objc private func toggleHUD() { gaze.isHUDVisible.toggle() }
     @objc private func togglePausesWhenCollapsed() { collapsePause.isEnabled.toggle() }
+
+    @objc private func selectVideoSize(_ sender: NSMenuItem) {
+        if let raw = sender.representedObject as? String, let size = IslandVideoSize(rawValue: raw) { island.videoSize = size }
+    }
     @objc private func togglePausesWhenAway() { awayPause.isEnabled.toggle() }
     @objc private func toggleHidesForOnlookers() { onlookerHide.isEnabled.toggle() }
 

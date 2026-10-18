@@ -8,6 +8,18 @@ final class IslandController: ObservableObject {
     @Published private(set) var isVisible = false
     @Published private(set) var isExpanded = false
     @Published private(set) var metrics: IslandMetrics
+    @Published var videoSize: IslandVideoSize {
+        didSet {
+            guard videoSize != oldValue else { return }
+            UserDefaults.standard.set(videoSize.rawValue, forKey: Self.videoSizeKey)
+            metrics.videoSize = videoSize
+            motion.metrics = metrics
+            motion.relayout()
+            // The docked window follows, so the capture stays sharp at the new size.
+            pip.resizeDocked()
+            Log.info("video size: \(videoSize.rawValue)")
+        }
+    }
     /// Keeps the island expanded regardless of input (used by gaze calibration).
     var forceExpanded = false { didSet { refreshExpanded() } }
     /// Someone is behind the user: the island hides in the notch while the video stays docked.
@@ -37,6 +49,9 @@ final class IslandController: ObservableObject {
     private let collapseDelay: TimeInterval = 0.3
     /// Trackpad scroll distance (points) per 10 s step.
     private let scrollStep: CGFloat = 40
+    /// How far a pinch has to open or close to change the video size.
+    private let pinchStep: CGFloat = 0.25
+    private static let videoSizeKey = "videoSize"
 
     private let pip: PiPController
     private let options: LaunchOptions
@@ -53,6 +68,10 @@ final class IslandController: ObservableObject {
     /// Opened with the keyboard shortcut: stays open until the shortcut closes it or the video goes.
     private var keyboardWantsExpanded = false
     private var scrollDistance: CGFloat = 0
+    private var pinch: CGFloat = 0
+    /// This pinch already changed the size: one step per pinch, so a long one doesn't run from
+    /// small past large in one go.
+    private var pinchStepped = false
     private var pendingScrubbedClear: DispatchWorkItem?
     private var debugCycleStep = 0
     private var cancellables = Set<AnyCancellable>()
@@ -60,7 +79,9 @@ final class IslandController: ObservableObject {
     init(pip: PiPController, options: LaunchOptions) {
         self.pip = pip
         self.options = options
-        let metrics = IslandMetrics.current(debugNotch: options.debugNotch)
+        let videoSize = IslandVideoSize(rawValue: UserDefaults.standard.string(forKey: Self.videoSizeKey) ?? "") ?? .medium
+        self.videoSize = videoSize
+        let metrics = IslandMetrics.current(debugNotch: options.debugNotch, videoSize: videoSize)
         self.metrics = metrics
         motion = IslandMotion(metrics: metrics)
         motion.aspect = pip.aspect
@@ -222,7 +243,7 @@ final class IslandController: ObservableObject {
     }
 
     private func screenChanged() {
-        metrics = IslandMetrics.current(debugNotch: options.debugNotch)
+        metrics = IslandMetrics.current(debugNotch: options.debugNotch, videoSize: videoSize)
         motion.metrics = metrics
         motion.snap(visible: isVisible, expanded: isExpanded)
         panel?.setFrame(metrics.panelFrame(), display: true)
@@ -314,19 +335,41 @@ final class IslandController: ObservableObject {
 
     // MARK: Scrolling
 
-    /// Two fingers (or the wheel) over the open video move it in 10 s steps.
+    /// Two fingers (or the wheel) over the open video move it in 10 s steps; a pinch over it
+    /// changes the video size.
     private func installScrollSeeking() {
-        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel, handler: { [weak self] event in
-            MainActor.assumeIsolated { self?.scrolled(event) }
-        }) {
+        let handle: (NSEvent) -> Void = { [weak self] event in
+            MainActor.assumeIsolated {
+                event.type == .magnify ? self?.pinched(event) : self?.scrolled(event)
+            }
+        }
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: [.scrollWheel, .magnify], handler: handle) {
             monitors.append(monitor)
         }
-        if let monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel, handler: { [weak self] event in
-            MainActor.assumeIsolated { self?.scrolled(event) }
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .magnify], handler: { event in
+            handle(event)
             return event
         }) {
             monitors.append(monitor)
         }
+    }
+
+    /// Bigger or smaller by one size, from the keyboard shortcuts or a pinch.
+    func stepVideoSize(bigger: Bool) {
+        if let next = bigger ? videoSize.bigger : videoSize.smaller { videoSize = next }
+    }
+
+    private func pinched(_ event: NSEvent) {
+        guard isVisible, isExpanded, !ignoresMouse, expandedRectOnScreen().contains(NSEvent.mouseLocation) else { return }
+        if event.phase == .began {
+            pinch = 0
+            pinchStepped = false
+        }
+        guard !pinchStepped else { return }
+        pinch += event.magnification
+        guard abs(pinch) >= pinchStep else { return }
+        pinchStepped = true
+        stepVideoSize(bigger: pinch > 0)
     }
 
     private func scrolled(_ event: NSEvent) {

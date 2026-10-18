@@ -10,7 +10,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     enum Tab: Int { case general, gaze, keyboard, about }
 
     private let gaze: GazeController
-    private let glow: AmbientGlow
+    private let island: IslandController
     private let collapsePause: CollapsePause
     private let awayPause: AwayPause
     private let onlookerHide: OnlookerHide
@@ -21,11 +21,11 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var tabs: NSTabViewController?
 
-    init(gaze: GazeController, glow: AmbientGlow, collapsePause: CollapsePause, awayPause: AwayPause,
+    init(gaze: GazeController, island: IslandController, collapsePause: CollapsePause, awayPause: AwayPause,
          onlookerHide: OnlookerHide, loginItem: LoginItem, hotKeys: HotKeys, updates: Updates,
          calibrate: @escaping () -> Void) {
         self.gaze = gaze
-        self.glow = glow
+        self.island = island
         self.collapsePause = collapsePause
         self.awayPause = awayPause
         self.onlookerHide = onlookerHide
@@ -53,7 +53,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private func makeWindow() {
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
-        let general = GeneralPane(glow: glow, collapsePause: collapsePause, awayPause: awayPause,
+        let general = GeneralPane(island: island, glow: island.glow, collapsePause: collapsePause, awayPause: awayPause,
                                   onlookerHide: onlookerHide, loginItem: loginItem, updates: updates)
         tabs.addTabViewItem(item("General", symbol: "gearshape", general))
         tabs.addTabViewItem(item("Gaze", symbol: "eye", GazePane(gaze: gaze, calibrate: { [weak self] in
@@ -86,6 +86,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 // MARK: General
 
 private struct GeneralPane: View {
+    @ObservedObject var island: IslandController
     @ObservedObject var glow: AmbientGlow
     @ObservedObject var collapsePause: CollapsePause
     @ObservedObject var awayPause: AwayPause
@@ -122,6 +123,15 @@ private struct GeneralPane: View {
                 }
             }
             Section("Island") {
+                Picker(selection: $island.videoSize) {
+                    ForEach(IslandVideoSize.allCases) { size in
+                        Text(size.title).tag(size)
+                    }
+                } label: {
+                    Text("Video size")
+                    Text("How big the video gets when the island opens. A pinch over the open video changes it too.")
+                }
+                .pickerStyle(.segmented)
                 Toggle(isOn: $glow.isEnabled) {
                     Text("Glow under the video")
                     Text("The video's colors softly light up the page under the open island.")

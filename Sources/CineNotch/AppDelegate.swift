@@ -57,10 +57,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .skipBack: pip.skip(forward: false)
             case .skipForward: pip.skip(forward: true)
             case .toggleIsland: island?.toggleFromKeyboard()
+            case .bigger: island?.stepVideoSize(bigger: true)
+            case .smaller: island?.stepVideoSize(bigger: false)
             }
         }
         self.hotKeys = hotKeys
-        let settings = SettingsWindow(gaze: gaze, glow: island.glow, collapsePause: collapsePause, awayPause: awayPause,
+        let settings = SettingsWindow(gaze: gaze, island: island, collapsePause: collapsePause, awayPause: awayPause,
                                       onlookerHide: onlookerHide, loginItem: loginItem, hotKeys: hotKeys, updates: updates,
                                       calibrate: { calibrator.start() })
         self.settings = settings
@@ -81,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { visible in visible ? hud.show() : hud.hide() }
             .store(in: &cancellables)
 
-        statusMenu = StatusMenu(pip: pip, gaze: gaze, collapsePause: collapsePause, awayPause: awayPause,
+        statusMenu = StatusMenu(pip: pip, gaze: gaze, island: island, collapsePause: collapsePause, awayPause: awayPause,
                                 onlookerHide: onlookerHide, updates: updates,
                                 thumbnail: { [weak island] in island?.thumbnail() },
                                 showPermissions: { onboarding.show(.permissions) },
