@@ -28,6 +28,8 @@ export const NOTCH = { width: 185 * SCALE, height: 32 * SCALE };
 export const footage = {
   old: { file: "old.webm", width: 990, height: 810 },
   new: { file: "new.webm", width: 1560, height: 1094 },
+  /** The "keys" scene of 0.6.0: ⌃⌥⌘O, scrolling, ⌃⌥⌘P (`--debug-demo-scene keys`). */
+  keys: { file: "keys.webm", width: 1560, height: 1094 },
 } as const;
 
 export type Version = keyof typeof footage;

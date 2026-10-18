@@ -59,7 +59,7 @@ export const IntroScene: React.FC = () => {
 };
 
 /** Warm closer: the mascot, the name, one line. */
-export const OutroScene: React.FC = () => {
+export const OutroScene: React.FC<{ line?: string }> = ({ line = "Safari's Picture in Picture, tucked into the notch" }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
@@ -97,7 +97,7 @@ export const OutroScene: React.FC = () => {
             opacity: interpolate(t, [0.55, 0.95], [0, 1], clamp),
           }}
         >
-          Safari's Picture in Picture, tucked into the notch
+          {line}
         </div>
       </div>
     </AbsoluteFill>

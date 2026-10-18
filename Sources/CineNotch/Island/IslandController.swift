@@ -350,6 +350,16 @@ final class IslandController: ObservableObject {
             steps = delta > 0 ? 1 : -1
         }
         guard steps != 0 else { return }
+        scrub(steps: steps)
+    }
+
+    /// The demo's scroll: what a scroll of `steps` 10 s steps over the open video does.
+    func simulateScroll(steps: Int) {
+        guard isExpanded else { return }
+        scrub(steps: steps)
+    }
+
+    private func scrub(steps: Int) {
         for _ in 0..<abs(steps) { pip.skip(forward: steps > 0) }
         scrubbed = (scrubbed ?? 0) + steps * 10
         pendingScrubbedClear?.cancel()

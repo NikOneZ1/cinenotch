@@ -4,12 +4,17 @@ import AppKit
 /// of different versions line up. With `--debug-record <file.mov>` the island window is
 /// recorded; the app quits at the end.
 ///
-/// Times from the start of the recording: 0.5 Picture in Picture starts, 2.5 hover, 5.0 the
-/// cursor leaves, 6.5 a glance that gives up, 8.5 a glance at the camera, 11.5 looking away,
-/// 12.7 pause, 14.2 play, 15.2 Picture in Picture ends, 16.8 the end.
+/// The "tour" scene, times from the start of the recording: 0.5 Picture in Picture starts, 2.5
+/// hover, 5.0 the cursor leaves, 6.5 a glance that gives up, 8.5 a glance at the camera, 11.5
+/// looking away, 12.7 pause, 14.2 play, 15.2 Picture in Picture ends, 16.8 the end.
+///
+/// The "keys" scene (`--debug-demo-scene keys`): 0.5 Picture in Picture starts, 2.5 ⌃⌥⌘O opens
+/// the island, 4.0–4.9 a scroll forward in four steps, 6.6–6.9 a scroll back in two, 8.6 ⌃⌥⌘P
+/// pauses, 10.0 ⌃⌥⌘P plays, 11.4 ⌃⌥⌘O closes the island, 13.0 the end.
 @MainActor
 enum DemoScript {
     static func run(pip: PiPController, island: IslandController, recordTo url: URL?) {
+        let keys = LaunchOptions.current.debugDemoScene == "keys"
         Task {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             let recorder = url.map(WindowRecorder.init(url:))
@@ -25,6 +30,22 @@ enum DemoScript {
                 let wait = time - Date().timeIntervalSince(start)
                 if wait > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1e9)) }
                 action()
+            }
+            if keys {
+                await at(0.5) { pip.setFakeActive(true) }
+                await at(2.5) { island.toggleFromKeyboard() }
+                for time in [4.0, 4.3, 4.6, 4.9] {
+                    await at(time) { island.simulateScroll(steps: 1) }
+                }
+                await at(6.6) { island.simulateScroll(steps: -1) }
+                await at(6.9) { island.simulateScroll(steps: -1) }
+                await at(8.6) { pip.togglePlay() }
+                await at(10.0) { pip.togglePlay() }
+                await at(11.4) { island.toggleFromKeyboard() }
+                await at(13.0) {}
+                await recorder?.stop()
+                if recorder != nil { NSApp.terminate(nil) }
+                return
             }
             await at(0.5) { pip.setFakeActive(true) }
             await at(2.5) { island.forceExpanded = true }

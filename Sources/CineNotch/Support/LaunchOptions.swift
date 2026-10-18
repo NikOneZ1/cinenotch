@@ -22,6 +22,8 @@ struct LaunchOptions {
     var debugWindowsDir: URL?
     /// Play a fixed scene on the fake video (see DemoScript).
     var debugDemo = false
+    /// `--debug-demo-scene <name>`: which scene the demo plays, "tour" (the default) or "keys".
+    var debugDemoScene = "tour"
     /// With `debugDemo`: record the island window into this movie, then quit.
     var debugRecordURL: URL?
     /// Island animations at a fifth of their speed, to look at them (and snapshot them) frame by frame.
@@ -40,6 +42,8 @@ struct LaunchOptions {
             case "--debug-demo":
                 options.debugDemo = true
                 options.debugFakePiP = true
+            case "--debug-demo-scene":
+                if let name = args.next() { options.debugDemoScene = name }
             case "--debug-record":
                 if let path = args.next() { options.debugRecordURL = URL(fileURLWithPath: path) }
             case "--debug-slow-motion": options.debugSlowMotion = true

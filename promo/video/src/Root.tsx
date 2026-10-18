@@ -1,5 +1,6 @@
 import { Composition, Folder } from "remotion";
 import { BeforeAfter } from "./BeforeAfter";
+import { Shortcuts } from "./Shortcuts";
 import { AfterScene } from "./scenes/AfterScene";
 import { BeforeScene } from "./scenes/BeforeScene";
 import { IrisOverlay } from "./scenes/IrisOverlay";
@@ -11,6 +12,7 @@ export const RemotionRoot: React.FC = () => {
   return (
     <>
       <Composition id="BeforeAfter" component={BeforeAfter} durationInFrames={1758} {...video} />
+      <Composition id="Shortcuts" component={Shortcuts} durationInFrames={958} {...video} />
       <Folder name="Scenes">
         <Composition id="Intro" component={IntroScene} durationInFrames={120} {...video} />
         <Composition id="Before" component={BeforeScene} durationInFrames={568} {...video} />

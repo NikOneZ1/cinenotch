@@ -135,6 +135,8 @@ final class PiPController: ObservableObject {
         if fakeVideo != nil {
             fakeProgress = min(max(fakeProgress + (forward ? 10 : -10) / Self.fakeLength, 0), 1)
             progress = (fakeProgress * 100).rounded() / 100
+            // The picture moves a quarter as far, so a scroll reads as fast-forward, not a strobe.
+            fakeTime = max(0, fakeTime + (forward ? 2.5 : -2.5))
             return
         }
         guard features.skip else { return }
