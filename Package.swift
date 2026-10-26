@@ -16,8 +16,19 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "CineNotch",
-            dependencies: [.product(name: "Sparkle", package: "Sparkle")],
+            dependencies: [.product(name: "Sparkle", package: "Sparkle"), "CineNotchLicense"],
             path: "Sources/CineNotch"
+        ),
+        // License keys: token check, Keychain storage, the client for cinenotch.cam's licensing proxy. Off unless
+        // `LicensingEnabled` is set in Info.plist (see docs/LICENSING.md). No UI, so it can be tested on its own.
+        .target(
+            name: "CineNotchLicense",
+            path: "Sources/CineNotchLicense"
+        ),
+        .testTarget(
+            name: "CineNotchLicenseTests",
+            dependencies: ["CineNotchLicense"],
+            path: "Tests/CineNotchLicenseTests"
         ),
         .target(
             name: "NowPlayingBridge",

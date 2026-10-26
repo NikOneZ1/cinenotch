@@ -1,13 +1,16 @@
 import AVFoundation
 import AppKit
+import CineNotchLicense
 import Combine
 import SwiftUI
 
 /// Settings: General (permissions, startup, the island, updates), Gaze (camera preview, sensitivity,
-/// calibration), Keyboard (shortcuts), About.
+/// calibration), Keyboard (shortcuts), License (only while licensing is on), About.
 @MainActor
 final class SettingsWindow: NSObject, NSWindowDelegate {
-    enum Tab: Int { case general, gaze, keyboard, about }
+    enum Tab: String {
+        case general = "General", gaze = "Gaze", keyboard = "Keyboard", license = "License", about = "About"
+    }
 
     private let gaze: GazeController
     private let island: IslandController
@@ -17,12 +20,13 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private let loginItem: LoginItem
     private let hotKeys: HotKeys
     private let updates: Updates
+    private let license: LicenseManager
     private let calibrate: () -> Void
     private var window: NSWindow?
     private var tabs: NSTabViewController?
 
     init(gaze: GazeController, island: IslandController, collapsePause: CollapsePause, awayPause: AwayPause,
-         onlookerHide: OnlookerHide, loginItem: LoginItem, hotKeys: HotKeys, updates: Updates,
+         onlookerHide: OnlookerHide, loginItem: LoginItem, hotKeys: HotKeys, updates: Updates, license: LicenseManager,
          calibrate: @escaping () -> Void) {
         self.gaze = gaze
         self.island = island
@@ -32,12 +36,15 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         self.loginItem = loginItem
         self.hotKeys = hotKeys
         self.updates = updates
+        self.license = license
         self.calibrate = calibrate
     }
 
     func show(_ tab: Tab = .general) {
         if window == nil { makeWindow() }
-        tabs?.selectedTabViewItemIndex = tab.rawValue
+        // Looked up by name: the License tab only exists while licensing is on.
+        let index = tabs?.tabViewItems.firstIndex { $0.label == tab.rawValue } ?? 0
+        tabs?.selectedTabViewItemIndex = index
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -61,6 +68,9 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
             self?.calibrate()
         })))
         tabs.addTabViewItem(item("Keyboard", symbol: "keyboard", KeyboardPane(hotKeys: hotKeys)))
+        if license.isEnforced {
+            tabs.addTabViewItem(item("License", symbol: "key", LicensePane(license: license)))
+        }
         tabs.addTabViewItem(item("About", symbol: "info.circle", AboutPane()))
         let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable]
@@ -388,5 +398,112 @@ private struct AboutPane: View {
         .padding(.vertical, 36)
         .padding(.horizontal, 40)
         .frame(width: 480)
+    }
+}
+
+// MARK: License
+
+/// Only exists while licensing is on (`LicensingEnabled`). See docs/LICENSING.md.
+private struct LicensePane: View {
+    @ObservedObject var license: LicenseManager
+    @State private var key = ""
+    @State private var confirmingDeactivate = false
+
+    var body: some View {
+        Form {
+            switch license.state {
+            case .licensed(let summary):
+                Section {
+                    LabeledContent {
+                        Text("Active")
+                            .font(.system(size: 13, weight: .semibold))
+                    } label: {
+                        Text("CineNotch is activated on this Mac")
+                        Text("Key \(summary.keyHint) · since \(summary.activatedAt.formatted(date: .abbreviated, time: .omitted))")
+                    }
+                    if summary.needsReconnect {
+                        Text("It's been a while since CineNotch checked in. Connect to the internet and choose Check Now. Everything keeps working meanwhile.")
+                            .font(.callout)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                Section {
+                    LabeledContent {
+                        Button("Check Now") { Task { await license.revalidateIfDue(force: true) } }
+                            .disabled(license.isBusy)
+                    } label: {
+                        Text("Check the license")
+                        Text("Last confirmed \(summary.lastValidatedAt.formatted(date: .abbreviated, time: .omitted)). It's rechecked about every two weeks, and CineNotch works offline in between.")
+                    }
+                    LabeledContent {
+                        Button("Deactivate…") { confirmingDeactivate = true }
+                            .disabled(license.isBusy)
+                    } label: {
+                        Text("Deactivate on this Mac")
+                        Text("Frees this Mac's place, so you can use the license on another one. One license works on up to 3 Macs.")
+                    }
+                    Button("Manage Purchase…") { Licensing.open(license.configuration.manageURL) }
+                        .buttonStyle(.link)
+                }
+            case .unlicensed(let reason):
+                Section {
+                    Text(heading(reason))
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("Your license key arrived by email when you bought CineNotch. One key works on up to 3 Macs, for every 1.x update.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    TextField("License key", text: $key)
+                        .textFieldStyle(.roundedBorder)
+                        .disableAutocorrection(true)
+                        .onSubmit(activate)
+                    HStack {
+                        Button("Activate", action: activate)
+                            .buttonStyle(AccentButtonStyle())
+                            .disabled(license.isBusy || key.trimmingCharacters(in: .whitespaces).isEmpty)
+                        if license.isBusy { ProgressView().controlSize(.small) }
+                        Spacer()
+                        Button("Buy CineNotch…") { Licensing.open(license.configuration.buyURL) }
+                            .buttonStyle(.link)
+                    }
+                }
+            case .off:
+                EmptyView()
+            }
+            if let message = license.message {
+                Section { Text(message).font(.callout) }
+            }
+            Section {
+                Text("Activating sends your license key and a hashed ID of this Mac (not your name, not the Mac's serial number) to cinenotch.cam, which checks it with our payment provider, Creem. Never video, camera or screen content. After that, about every two weeks, CineNotch asks again.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Trouble? Write to \(license.configuration.supportEmail).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 480)
+        .fixedSize(horizontal: false, vertical: true)
+        .confirmationDialog("Deactivate CineNotch on this Mac?", isPresented: $confirmingDeactivate) {
+            Button("Deactivate", role: .destructive) { Task { await license.deactivate() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("CineNotch stops docking videos here until you activate it again. Your license stays yours.")
+        }
+    }
+
+    private func heading(_ reason: UnlicensedReason) -> String {
+        switch reason {
+        case .never: return "Enter your license key to unlock CineNotch"
+        case .revoked: return "This license is no longer valid"
+        case .storedInvalid: return "This Mac needs to be activated again"
+        }
+    }
+
+    private func activate() {
+        let entered = key
+        Task {
+            if await license.activate(key: entered) { key = "" }
+        }
     }
 }

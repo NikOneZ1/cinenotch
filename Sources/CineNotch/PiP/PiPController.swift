@@ -46,6 +46,10 @@ final class PiPController: ObservableObject {
     @Published private(set) var aspect: CGFloat = 16.0 / 9.0
     @Published private(set) var source = PiPSource.system
     @Published private(set) var features = PiPSource.system.features
+    /// Licensing is on and this Mac isn't activated (see `Licensing`). While locked nothing is docked: the PiP window
+    /// stays an ordinary floating window, and `lockedVideoPresent` says there is one the user could have docked.
+    @Published private(set) var isLocked = false
+    @Published private(set) var lockedVideoPresent = false
 
     let capture = PiPCapture()
     private let nowPlaying = NowPlaying()
@@ -199,10 +203,39 @@ final class PiPController: ObservableObject {
         dockWindow(window)
     }
 
+    /// Locks or unlocks docking. Never called with `true` unless licensing is on, so with licensing off this changes nothing.
+    func setLocked(_ locked: Bool) {
+        guard locked != isLocked else { return }
+        isLocked = locked
+        Log.info("PiP \(locked ? "locked" : "unlocked")")
+        if locked {
+            if fakeVideo != nil {
+                isActive = false
+                lockedVideoPresent = true
+            } else if window != nil {
+                // Give the window back where it was, then let go of it.
+                release()
+                detach()
+            }
+        } else {
+            lockedVideoPresent = false
+            if fakeVideo != nil {
+                isActive = !LaunchOptions.current.debugDemo
+            } else if timer != nil {
+                tick()
+            }
+        }
+    }
+
     // MARK: Polling
 
     private func tick() {
         guard AXIsProcessTrusted() else { return }
+        if isLocked {
+            let present = findWindow() != nil
+            if present != lockedVideoPresent { lockedVideoPresent = present }
+            return
+        }
         guard let found = findWindow() else {
             detach()
             return
@@ -467,7 +500,8 @@ final class PiPController: ObservableObject {
         progress = fakeProgress
         isPlaying = true
         // The demo starts it on cue.
-        isActive = !LaunchOptions.current.debugDemo
+        isActive = !LaunchOptions.current.debugDemo && !isLocked
+        lockedVideoPresent = isLocked
         let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.fakeTick() }
         }
@@ -497,7 +531,9 @@ final class PiPController: ObservableObject {
     /// Closing the fake video brings it back two seconds later, to see both animations.
     private func closeFake() {
         isActive = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.isActive = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            if let self, !self.isLocked { self.isActive = true }
+        }
     }
 
     static func parsePercent(_ text: String) -> Double? {

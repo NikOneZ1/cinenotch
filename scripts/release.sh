@@ -27,6 +27,19 @@ VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resource
 BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" Resources/Info.plist)
 echo "CineNotch $VERSION ($BUILD), signed by $IDENTITY"
 
+# Licensing (docs/LICENSING.md): a build with it switched on must carry the key that checks the tokens.
+LICENSING=$(/usr/libexec/PlistBuddy -c "Print LicensingEnabled" Resources/Info.plist 2>/dev/null || echo false)
+if [[ "$LICENSING" == "true" ]]; then
+  LICENSE_KEY=$(/usr/libexec/PlistBuddy -c "Print LicensePublicKey" Resources/Info.plist 2>/dev/null || true)
+  if [[ -z "$LICENSE_KEY" ]]; then
+    echo "error: LicensingEnabled is true but LicensePublicKey is empty in Resources/Info.plist." >&2
+    exit 1
+  fi
+  echo "licensing: ON (public key ${LICENSE_KEY:0:8}…)"
+else
+  echo "licensing: off (free build)"
+fi
+
 if [[ -n "${NOTARY_KEY:-}" ]]; then
   AUTH=(--key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER")
 else

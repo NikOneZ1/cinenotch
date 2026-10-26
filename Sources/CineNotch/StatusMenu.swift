@@ -1,4 +1,5 @@
 import AppKit
+import CineNotchLicense
 import Combine
 import SwiftUI
 
@@ -14,17 +15,19 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let awayPause: AwayPause
     private let onlookerHide: OnlookerHide
     private let updates: Updates
+    private let license: LicenseManager
     private let thumbnail: () -> CGImage?
     private let showPermissions: () -> Void
     private let showSettings: () -> Void
+    private let showLicense: () -> Void
     private let calibrate: () -> Void
     private let testGaze: () -> Void
     private var cancellables = Set<AnyCancellable>()
 
     init(pip: PiPController, gaze: GazeController, island: IslandController, collapsePause: CollapsePause, awayPause: AwayPause,
-         onlookerHide: OnlookerHide, updates: Updates,
+         onlookerHide: OnlookerHide, updates: Updates, license: LicenseManager,
          thumbnail: @escaping () -> CGImage?,
-         showPermissions: @escaping () -> Void, showSettings: @escaping () -> Void,
+         showPermissions: @escaping () -> Void, showSettings: @escaping () -> Void, showLicense: @escaping () -> Void,
          calibrate: @escaping () -> Void, testGaze: @escaping () -> Void) {
         self.pip = pip
         self.gaze = gaze
@@ -33,9 +36,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         self.awayPause = awayPause
         self.onlookerHide = onlookerHide
         self.updates = updates
+        self.license = license
         self.thumbnail = thumbnail
         self.showPermissions = showPermissions
         self.showSettings = showSettings
+        self.showLicense = showLicense
         self.calibrate = calibrate
         self.testGaze = testGaze
         super.init()
@@ -59,6 +64,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         if !Permissions.allGranted {
             menu.addItem(makeItem("Allow Permissions…", #selector(openPermissions), symbol: "exclamationmark.triangle"))
             menu.addItem(.separator())
+        }
+
+        // Only while licensing is on and this Mac isn't activated: the core features wait, the rest of the menu stays.
+        if !license.isUnlocked {
+            menu.addItem(makeItem("Enter License Key…", #selector(enterLicenseKey), symbol: "key"))
+            menu.addItem(makeItem("Buy CineNotch…", #selector(buy), symbol: "cart"))
+            menu.addItem(.separator())
+            addFooter(to: menu, developer: developer)
+            return
         }
 
         menu.addItem(NSMenuItem.sectionHeader(title: "Glance at the Camera"))
@@ -106,6 +120,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        addFooter(to: menu, developer: developer)
+    }
+
+    private func addFooter(to menu: NSMenu, developer: Bool) {
         menu.addItem(makeItem("Settings…", #selector(openSettings), key: ",", symbol: "gearshape"))
         if updates.isAvailable {
             menu.addItem(makeItem("Check for Updates…", #selector(checkForUpdates), symbol: "arrow.down.circle"))
@@ -140,7 +158,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private func nowPlaying() -> NSMenuItem {
         let state: NowPlayingCard.State
-        if !Permissions.allGranted {
+        if !license.isUnlocked {
+            state = .locked
+        } else if !Permissions.allGranted {
             state = .needsPermissions
         } else if pip.isActive {
             state = .docked(title: pip.title, thumbnail: thumbnail(), progress: pip.progress,
@@ -168,6 +188,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     @objc private func releaseWindow() { pip.release() }
     @objc private func openPermissions() { showPermissions() }
     @objc private func openSettings() { showSettings() }
+    @objc private func enterLicenseKey() { showLicense() }
+    @objc private func buy() { Licensing.open(license.configuration.buyURL) }
     @objc private func checkForUpdates() { updates.checkForUpdates() }
     @objc private func startCalibration() { calibrate() }
     @objc private func startGazeTest() { testGaze() }
@@ -205,6 +227,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 private struct NowPlayingCard: View {
     enum State {
         case needsPermissions
+        /// Licensing is on and this Mac isn't activated.
+        case locked
         case waiting
         case released(title: String)
         /// `isPlaying` is nil when the window doesn't tell (Chrome).
@@ -248,7 +272,7 @@ private struct NowPlayingCard: View {
                 .saturation(isPlaying == false ? 0.2 : 1)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         default:
-            Mascot(width: 54, awake: !isNeedsPermissions)
+            Mascot(width: 54, awake: !isNeedsPermissions && !isLocked)
                 .frame(width: 72, height: 41)
         }
     }
@@ -258,8 +282,14 @@ private struct NowPlayingCard: View {
         return false
     }
 
+    private var isLocked: Bool {
+        if case .locked = state { return true }
+        return false
+    }
+
     private var title: String {
         switch state {
+        case .locked: return "CineNotch isn't activated"
         case .needsPermissions: return "CineNotch needs two permissions"
         case .waiting: return "No video yet"
         case let .released(title), let .docked(title, _, _, _): return title.isEmpty ? "Picture in Picture" : title
@@ -268,6 +298,7 @@ private struct NowPlayingCard: View {
 
     private var detail: String {
         switch state {
+        case .locked: return "Enter your license key to dock videos."
         case .needsPermissions: return "Allow them to dock the video."
         case .waiting: return "Start Picture in Picture in Safari or Chrome."
         case .released: return "Floating outside the island."

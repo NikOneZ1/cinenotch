@@ -1,4 +1,5 @@
 import AppKit
+import CineNotchLicense
 import Combine
 import SwiftUI
 
@@ -8,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let pip = PiPController()
     private let gaze = GazeController()
     private let updates = Updates()
+    private lazy var license = Licensing.makeManager(options: options)
     private let loginItem = LoginItem()
     private var hotKeys: HotKeys?
     private var island: IslandController?
@@ -21,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var collapsePause: CollapsePause?
     private var awayPause: AwayPause?
     private var onlookerHide: OnlookerHide?
+    private var lockPill: LockPill?
     private var cancellables = Set<AnyCancellable>()
     private var signalSources: [DispatchSourceSignal] = []
     private var started = false
@@ -63,7 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.hotKeys = hotKeys
         let settings = SettingsWindow(gaze: gaze, island: island, collapsePause: collapsePause, awayPause: awayPause,
-                                      onlookerHide: onlookerHide, loginItem: loginItem, hotKeys: hotKeys, updates: updates,
+                                      onlookerHide: onlookerHide, loginItem: loginItem, hotKeys: hotKeys, updates: updates, license: license,
                                       calibrate: { calibrator.start() })
         self.settings = settings
         let onboarding = Onboarding()
@@ -75,6 +78,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.onboarding = onboarding
 
+        // Licensing: off in every build until Info.plist says otherwise, and then nothing in this block does anything.
+        let license = self.license
+        pip.setLocked(!license.isUnlocked)
+        license.$state
+            .map { !$0.isUnlocked }
+            .removeDuplicates()
+            .sink { [pip] locked in pip.setLocked(locked) }
+            .store(in: &cancellables)
+        if license.isEnforced {
+            lockPill = LockPill(license: license, pip: pip,
+                                enterKey: { settings.show(.license) },
+                                buy: { Licensing.open(license.configuration.buyURL) })
+        }
+        license.start()
+
         pip.$isActive
             .sink { [weak self] active in self?.gaze.isPiPActive = active && !(self?.options.debugDemo ?? false) }
             .store(in: &cancellables)
@@ -84,10 +102,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         statusMenu = StatusMenu(pip: pip, gaze: gaze, island: island, collapsePause: collapsePause, awayPause: awayPause,
-                                onlookerHide: onlookerHide, updates: updates,
+                                onlookerHide: onlookerHide, updates: updates, license: license,
                                 thumbnail: { [weak island] in island?.thumbnail() },
                                 showPermissions: { onboarding.show(.permissions) },
                                 showSettings: { settings.show() },
+                                showLicense: { settings.show(.license) },
                                 calibrate: { calibrator.start() },
                                 testGaze: { tester.start() })
         if options.evaluateGaze {
@@ -144,7 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await snap(onboarding.windowNumber, "onboarding-\(step)")
         }
         onboarding.close()
-        for tab in [SettingsWindow.Tab.general, .keyboard, .about] {
+        for tab in [SettingsWindow.Tab.general, .keyboard] + (license.isEnforced ? [.license] : []) + [.about] {
             settings.show(tab)
             await snap(settings.windowNumber, "settings-\(tab)")
         }
