@@ -7,6 +7,10 @@ CineNotch docks the Picture in Picture video from Safari or Chrome into the notc
 pill in the menu bar on Macs without one) instead of letting it float over your work. You don't reach for the
 mouse to watch it: a glance is enough.
 
+CineNotch is open source under the GPLv3. The signed, notarized app that updates itself is a
+one-time purchase at [cinenotch.cam](https://cinenotch.cam), and you can always build it
+yourself: see [Build from source](#build-from-source).
+
 ![The video tucked into the notch, and sliding out after a glance at the camera](docs/screenshot.png)
 
 ## Open it with a glance
@@ -52,10 +56,15 @@ Status: early. Safari and Chrome, one screen.
 
 ## Download
 
-**[Download CineNotch](https://github.com/NikOneZ1/cinenotch/releases/latest/download/CineNotch.dmg)**
-for macOS 14 or later, Apple silicon and Intel. It's also on [cinenotch.cam](https://cinenotch.cam).
-The app is signed with Developer ID and notarized by Apple: open the disk image and drag
-CineNotch to Applications.
+**[Buy CineNotch at cinenotch.cam](https://cinenotch.cam/#pricing)**: a one-time purchase of
+$14.99, with no subscription. One license covers up to 3 of your Macs and every 1.x update, and
+there's a 30-day money-back guarantee instead of a free trial. Payments go through
+[Creem](https://creem.io), which emails you a license key.
+
+It needs macOS 14 or later, Apple silicon or Intel. The app is signed with Developer ID and
+notarized by Apple: open the disk image and drag CineNotch to Applications.
+<!-- TODO(paid gating): license key entry isn't built yet. Once it ships, say here where the key goes. -->
+Already bought it? [Download the latest build](https://github.com/NikOneZ1/cinenotch/releases/latest/download/CineNotch.dmg).
 From 0.2.0 on it updates itself with [Sparkle](https://sparkle-project.org): once a day it checks
 `cinenotch.cam/appcast.xml` (Settings → General turns that off), and **Check for Updates…** is
 in the menu.
@@ -86,7 +95,8 @@ light is on during that time.
 
 ## Build from source
 
-Needs macOS 14 or later and Swift 5.9+ (Xcode or just the Command Line Tools).
+The code is open, so you can build the app yourself, for free. It needs macOS 14 or later and
+Swift 5.9+ (Xcode or just the Command Line Tools).
 
 ```bash
 ./scripts/make-dev-cert.sh   # once: local signing identity, keeps permissions across rebuilds
@@ -230,10 +240,20 @@ goes to `~/Library/Logs/CineNotch-gaze.csv`. Calibration samples are kept in
 - Other browsers: Arc, Edge, Brave and Firefox draw their own PiP windows too (the Chromium
   ones probably work like Chrome)
 
+## Why is it paid?
+
+CineNotch is a one-person project. The code is open and stays open, but shipping it takes work:
+signing and notarizing every release (which needs an Apple Developer membership), fixing
+things when a macOS update changes how Picture in Picture behaves, and answering mail. The
+paid, signed build with its updates and support is what pays for that. Prefer to do it yourself?
+Build it from source: that's what the GPLv3 is for.
+
 ## License
 
-CineNotch is free software under the [GNU General Public License v3.0](LICENSE).
-Copyright © 2026 Nikita Verba.
+CineNotch's source code is free software under the [GNU General Public License v3.0](LICENSE).
+Copyright © 2026 Nikita Verba. You can read, build, change and share it under that license, and
+buying the app doesn't change that: a purchase is for the signed, notarized build, its license
+key, updates and support.
 
 The license doesn't cover the CineNotch name and app icon: if you publish a fork, please give it
 its own name and icon.
