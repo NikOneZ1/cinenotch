@@ -100,7 +100,11 @@ what the proxy does about it (`src/license.js`, mirrored in `scripts/mock-creem.
   removed from the product (the checkout itself said `success_url: null`). Check for a store-wide
   redirect in Creem's settings; `/thanks` points to the email in any case.
 
-Still untested: what a refunded license looks like (status `disabled`? a 410 on validate?).
+- **A refund doesn't touch the license.** After a full refund in test mode (transaction `refunded`) the
+  key stayed `active`: it still validated and even activated a new Mac. The API has no call to disable a
+  key, so after each refund disable it by hand in the Creem dashboard (the refund page promises the key
+  ends). A `disabled` key validates as `status: "disabled"`, which the proxy answers with 410 and the app
+  locks on the second answer like that (6 hours apart, at the next 14-day check at the latest).
 
 ## Privacy
 
