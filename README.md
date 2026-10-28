@@ -7,8 +7,8 @@ CineNotch docks the Picture in Picture video from Safari or Chrome into the notc
 pill in the menu bar on Macs without one) instead of letting it float over your work. You don't reach for the
 mouse to watch it: a glance is enough.
 
-CineNotch is open source under the GPLv3. It is free to download for now and becomes a $14.99
-one-time purchase soon (see [Pricing](#pricing)), and you can always build it yourself: see
+CineNotch is open source under the GPLv3. The signed app is a $14.99 one-time purchase (see
+[Pricing](#pricing)), and you can always build it yourself for free: see
 [Build from source](#build-from-source).
 
 ![The video tucked into the notch, and sliding out after a glance at the camera](docs/screenshot.png)
@@ -58,20 +58,10 @@ Status: early. Safari and Chrome, one screen.
 
 **[Download CineNotch](https://github.com/NikOneZ1/cinenotch/releases/latest/download/CineNotch.dmg)**
 for macOS 14 or later, Apple silicon and Intel. It's also on [cinenotch.cam](https://cinenotch.cam).
-CineNotch is free to download for now and becomes a $14.99 one-time purchase soon.
 The app is signed with Developer ID and notarized by Apple: open the disk image and drag
-CineNotch to Applications.
-<!-- FLIP (when it is for sale): replace the Download text above with something like this, and fix the
-anchor of the Pricing section below.
-
-**[Buy CineNotch at cinenotch.cam](https://cinenotch.cam/#pricing)**: a one-time purchase of
-$14.99, with no subscription. One license covers up to 3 of your Macs and every 1.x update, and
-there's a 30-day money-back guarantee instead of a free trial. Payments go through
-[Creem](https://creem.io), which emails you a license key.
-License key entry is built but switched off: see docs/LICENSING.md. When it's on, say here that the key goes in
-Settings → License.
-TODO(licensing): README must keep saying "free for now" until LicensingEnabled ships as true.
--->
+CineNotch to Applications. To unlock it, **[buy a license at cinenotch.cam](https://cinenotch.cam/#pricing)**
+($14.99 once) and paste the key from your email in Settings → License. Used CineNotch before 1.0?
+It stays free for you, updates included: nothing to do.
 From 0.2.0 on it updates itself with [Sparkle](https://sparkle-project.org): once a day it checks
 `cinenotch.cam/appcast.xml` (Settings → General turns that off), and **Check for Updates…** is
 in the menu.
@@ -249,24 +239,25 @@ goes to `~/Library/Logs/CineNotch-gaze.csv`. Calibration samples are kept in
 
 ## Pricing
 
-CineNotch is free to download for now. It becomes a $14.99 one-time purchase soon, for the signed,
-notarized app that updates itself. The source code stays open under the GPLv3, and you can always
-build it yourself.
-<!-- FLIP (when it is for sale): add a short "Why is it paid?" section here, along these lines.
+CineNotch is a $14.99 one-time purchase, with no subscription. You get the signed, notarized app
+that updates itself; one license covers up to 3 of your Macs and every 1.x update. There's a 30-day
+money-back guarantee instead of a free trial. Payments go through [Creem](https://creem.io), which
+emails you the license key. Everyone who used CineNotch before 1.0 keeps it free.
+
+### Why is it paid?
 
 CineNotch is a one-person project. The code is open and stays open, but shipping it takes work:
 signing and notarizing every release (which needs an Apple Developer membership), fixing
 things when a macOS update changes how Picture in Picture behaves, and answering mail. The
 paid, signed build with its updates and support is what pays for that. Prefer to do it yourself?
 Build it from source: that's what the GPLv3 is for.
--->
 
 ## License
 
 CineNotch is free software under the [GNU General Public License v3.0](LICENSE).
 Copyright © 2026 Nikita Verba. You can read, build, change and share it under that license, and
-that stays true when the app becomes a paid purchase: what will be sold is the signed, notarized
-build, not the code.
+that stays true now that the app is a paid purchase: what's sold is the signed, notarized build,
+not the code.
 
 The license doesn't cover the CineNotch name and app icon: if you publish a fork, please give it
 its own name and icon.
