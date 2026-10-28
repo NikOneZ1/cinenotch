@@ -103,7 +103,7 @@ what the proxy does about it (`src/license.js`, mirrored in `scripts/mock-creem.
 - **A refund doesn't touch the license.** After a full refund in test mode (transaction `refunded`) the
   key stayed `active`: it still validated and even activated a new Mac. The API has no call to disable a
   key, so after each refund disable it by hand in the Creem dashboard (the refund page promises the key
-  ends). A `disabled` key should validate as `status: "disabled"` (not tried yet), which the proxy answers with 410 and the app
+  ends). A `disabled` key validates as `status: "disabled"` and its activation is a 400 "License key is disabled"; the proxy answers both with 410 (`revoked`) and the app
   locks on the second answer like that (6 hours apart, at the next 14-day check at the latest).
 
 ## Privacy
