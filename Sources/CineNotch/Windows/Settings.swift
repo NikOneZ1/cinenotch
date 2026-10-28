@@ -445,10 +445,30 @@ private struct LicensePane: View {
                     Button("Manage Purchase…") { Licensing.open(license.configuration.manageURL) }
                         .buttonStyle(.link)
                 }
+            case .earlySupporter:
+                Section {
+                    LabeledContent {
+                        Text("Free for good")
+                            .font(.system(size: 13, weight: .semibold))
+                    } label: {
+                        Text("You're an early supporter")
+                        Text("You used CineNotch before it was paid, so it stays free for you, updates included. Thank you!")
+                    }
+                }
             case .unlicensed(let reason):
                 Section {
                     Text(heading(reason))
                         .font(.system(size: 13, weight: .semibold))
+                    if license.canRecheck {
+                        HStack {
+                            Text("If that's a mistake, CineNotch rechecks once a day and unlocks by itself.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Check Again") { Task { await license.revalidateIfDue(force: true) } }
+                                .disabled(license.isBusy)
+                        }
+                    }
                     Text("Your license key arrived by email when you bought CineNotch. One key works on up to 3 Macs, for every 1.x update.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -472,13 +492,15 @@ private struct LicensePane: View {
             if let message = license.message {
                 Section { Text(message).font(.callout) }
             }
-            Section {
-                Text("Activating sends your license key and a hashed ID of this Mac (not your name, not the Mac's serial number) to cinenotch.cam, which checks it with our payment provider, Creem. Never video, camera or screen content. After that, about every two weeks, CineNotch asks again.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("Trouble? Write to \(license.configuration.supportEmail).")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if !isEarlySupporter {
+                Section {
+                    Text("Activating sends your license key and a hashed ID of this Mac (not your name, not the Mac's serial number) to cinenotch.cam, which checks it with our payment provider, Creem. Never video, camera or screen content. After that, about every two weeks, CineNotch asks again.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Trouble? Write to \(license.configuration.supportEmail).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)
@@ -490,6 +512,11 @@ private struct LicensePane: View {
         } message: {
             Text("CineNotch stops docking videos here until you activate it again. Your license stays yours.")
         }
+    }
+
+    private var isEarlySupporter: Bool {
+        if case .earlySupporter = license.state { return true }
+        return false
     }
 
     private func heading(_ reason: UnlicensedReason) -> String {

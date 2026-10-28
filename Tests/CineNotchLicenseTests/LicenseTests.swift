@@ -26,6 +26,20 @@ private final class FakeServer: LicenseServing, @unchecked Sendable {
     }
 }
 
+/// Validates slowly, so an activation can be tried meanwhile.
+private final class SlowServer: LicenseServing, @unchecked Sendable {
+    let grant: LicenseGrant
+    var calls: [String] = []
+    init(_ grant: LicenseGrant) { self.grant = grant }
+    func activate(key: String, deviceID: String, deviceLabel: String) async throws -> LicenseGrant { calls.append("activate"); return grant }
+    func validate(key: String, instanceID: String, deviceID: String) async throws -> LicenseGrant {
+        calls.append("validate")
+        try await Task.sleep(nanoseconds: 300_000_000)
+        return grant
+    }
+    func deactivate(key: String, instanceID: String, deviceID: String) async throws {}
+}
+
 final class LicenseTokenTests: XCTestCase {
     private var publicKey: Curve25519.Signing.PublicKey {
         try! Curve25519.Signing.PublicKey(rawRepresentation: Data(base64Encoded: Vector.publicKey)!)
@@ -87,9 +101,9 @@ final class LicenseManagerTests: XCTestCase {
     private var grant: LicenseGrant { LicenseGrant(token: Vector.token, instanceID: "inst_vec", activation: 1, activationLimit: 3) }
 
     private func manager(_ store: LicenseStoring, _ server: LicenseServing, now: Date = Vector.issued.addingTimeInterval(60),
-                         configuration: LicenseConfiguration? = nil, clock: ClockBox? = nil) -> LicenseManager {
+                         configuration: LicenseConfiguration? = nil, clock: ClockBox? = nil, priorInstall: Bool = false) -> LicenseManager {
         LicenseManager(configuration: configuration ?? config, store: store, server: server, deviceID: Vector.device,
-                       deviceLabel: "Test", now: { clock?.date ?? now })
+                       deviceLabel: "Test", now: { clock?.date ?? now }, priorInstall: priorInstall)
     }
 
     final class ClockBox { var date: Date; init(_ d: Date) { date = d } }
@@ -128,7 +142,7 @@ final class LicenseManagerTests: XCTestCase {
         let ok = await m.activate(key: "  \(Vector.key)\n")
         XCTAssertTrue(ok)
         XCTAssertTrue(m.isUnlocked)
-        XCTAssertEqual(store.load()?.key, Vector.key)
+        XCTAssertEqual(try? store.load()?.key, Vector.key)
         m.stop()
     }
 
@@ -140,7 +154,7 @@ final class LicenseManagerTests: XCTestCase {
             let ok = await m.activate(key: Vector.key)
             XCTAssertFalse(ok)
             XCTAssertFalse(m.isUnlocked)
-            XCTAssertNil(store.load())
+            XCTAssertNil(try? store.load())
             XCTAssertNotNil(m.message)
         }
     }
@@ -197,19 +211,143 @@ final class LicenseManagerTests: XCTestCase {
         let m = manager(store, FakeServer(.success(grant)), clock: clock)
         m.start()
         await m.revalidateIfDue()
-        XCTAssertEqual(store.load()?.lastValidatedAt, clock.date)
+        XCTAssertEqual(try? store.load()?.lastValidatedAt, clock.date)
         m.stop()
     }
 
-    func testOnlyAFinalAnswerLocks() async {
+    func testOneRefusalDoesntLockARepeatedOneDoesAndKeepsTheKey() async {
         let store = MemoryLicenseStore(stored())
+        let server = FakeServer(.failure(.revoked))
         let clock = ClockBox(Vector.issued.addingTimeInterval(15 * 86400))
-        let m = manager(store, FakeServer(.failure(.revoked)), clock: clock)
+        let m = manager(store, server, clock: clock)
         m.start()
         await m.revalidateIfDue()
+        XCTAssertTrue(m.isUnlocked, "a single 'not valid' only waits for confirmation")
+        XCTAssertNotNil(try? store.load()?.refusedAt)
+        await m.revalidateIfDue(force: true)
+        XCTAssertTrue(m.isUnlocked, "a repeat within the hour isn't a confirmation")
+        clock.date = clock.date.addingTimeInterval(7 * 3600)
+        await m.revalidateIfDue()
         XCTAssertEqual(m.state, .unlicensed(.revoked))
-        XCTAssertNil(store.load())
+        XCTAssertEqual(try? store.load()?.key, Vector.key, "the key is kept")
+        XCTAssertTrue(m.canRecheck)
+        m.start()
+        XCTAssertEqual(m.state, .unlicensed(.revoked), "and it stays locked after a relaunch")
         m.stop()
+    }
+
+    func testARefusalFollowedBySuccessIsForgotten() async {
+        let store = MemoryLicenseStore(stored())
+        let server = FakeServer(.failure(.notFound))
+        let clock = ClockBox(Vector.issued.addingTimeInterval(15 * 86400))
+        let m = manager(store, server, clock: clock)
+        m.start()
+        await m.revalidateIfDue()
+        server.result = .success(grant)
+        clock.date = clock.date.addingTimeInterval(7 * 3600)
+        await m.revalidateIfDue()
+        XCTAssertTrue(m.isUnlocked)
+        XCTAssertNil(try? store.load()?.refusedAt)
+        server.result = .failure(.notFound)
+        clock.date = clock.date.addingTimeInterval(20 * 86400)
+        await m.revalidateIfDue()
+        XCTAssertTrue(m.isUnlocked, "a new run of refusals starts from one")
+        m.stop()
+    }
+
+    func testALockedMacUnlocksByItselfWhenTheServerChangesItsMind() async {
+        // What a misconfigured server would do to every Mac, and how they recover once it's fixed.
+        var license = stored()
+        license.revokedAt = Vector.issued.addingTimeInterval(14 * 86400)
+        let store = MemoryLicenseStore(license)
+        let server = FakeServer(.failure(.revoked))
+        let clock = ClockBox(Vector.issued.addingTimeInterval(15 * 86400))
+        let m = manager(store, server, clock: clock)
+        m.start()
+        await m.revalidateIfDue()
+        XCTAssertEqual(server.calls, ["validate"], "a locked Mac with a key checks at launch")
+        XCTAssertFalse(m.isUnlocked)
+        await m.revalidateIfDue()
+        XCTAssertEqual(server.calls.count, 1, "then once a day")
+        server.result = .success(grant)
+        clock.date = clock.date.addingTimeInterval(86400 + 60)
+        await m.revalidateIfDue()
+        XCTAssertTrue(m.isUnlocked)
+        XCTAssertNil(try? store.load()?.revokedAt)
+        XCTAssertEqual(m.message, "Your license is valid again.")
+        m.stop()
+    }
+
+    func testAnUnreadableKeychainIsNotAnUnpaidMac() async {
+        let store = MemoryLicenseStore(stored())
+        store.failingReads = 1
+        let server = FakeServer(.success(grant))
+        let m = manager(store, server)
+        m.start()
+        XCTAssertEqual(m.state, .unlicensed(.never), "nothing decided yet")
+        XCTAssertNil(try? store.loadEarlyAccess(), "and nothing written")
+        let ok = await m.activate(key: Vector.key)
+        XCTAssertFalse(ok, "no activation over a license that couldn't be read")
+        XCTAssertEqual(server.calls, [])
+        m.start()
+        guard case .licensed = m.state else { return XCTFail("\(m.state)") }
+        m.stop()
+    }
+
+    func testActivateWaitsForABackgroundCheck() async {
+        let server = SlowServer(grant)
+        let clock = ClockBox(Vector.issued.addingTimeInterval(15 * 86400))
+        let m = manager(MemoryLicenseStore(stored()), server, clock: clock)
+        m.start()
+        let check = Task { await m.revalidateIfDue(force: true) }
+        await Task.yield()
+        let ok = await m.activate(key: Vector.key)
+        await check.value
+        XCTAssertTrue(ok, "the click isn't lost while a check is running")
+        XCTAssertEqual(server.calls, ["validate", "activate"])
+        m.stop()
+    }
+
+    // MARK: Early supporters
+
+    func testAMacThatUsedCineNotchBeforeIsFreeForGood() async {
+        let store = MemoryLicenseStore()
+        let server = FakeServer(.failure(.revoked))
+        let m = manager(store, server, priorInstall: true)
+        XCTAssertFalse(m.isUnlocked)
+        m.start()
+        guard case .earlySupporter = m.state else { return XCTFail("\(m.state)") }
+        XCTAssertTrue(m.isUnlocked)
+        await m.revalidateIfDue(force: true)
+        XCTAssertEqual(server.calls, [], "nothing is ever checked")
+        XCTAssertEqual(try? store.loadEarlyAccess()?.isEarlySupporter, true)
+        let later = manager(store, server, priorInstall: false)
+        later.start()
+        guard case .earlySupporter = later.state else { return XCTFail("the decision is kept: \(later.state)") }
+        m.stop()
+        later.stop()
+    }
+
+    func testANewMacStaysNewEvenAfterItHasSettings() {
+        let store = MemoryLicenseStore()
+        let first = manager(store, FakeServer(.failure(.unavailable)), priorInstall: false)
+        first.start()
+        XCTAssertEqual(first.state, .unlicensed(.never))
+        XCTAssertEqual(try? store.loadEarlyAccess()?.isEarlySupporter, false)
+        // Next launch: onboarding has run, so the "used before" evidence is there now. The saved decision wins.
+        let next = manager(store, FakeServer(.failure(.unavailable)), priorInstall: true)
+        next.start()
+        XCTAssertEqual(next.state, .unlicensed(.never))
+        first.stop()
+        next.stop()
+    }
+
+    func testEarlySupporterNeedsNothingWhenLicensingIsOff() {
+        let store = MemoryLicenseStore()
+        let m = manager(store, FakeServer(.failure(.unavailable)), configuration: LicenseConfiguration(info: nil), priorInstall: true)
+        m.start()
+        XCTAssertEqual(m.state, .off)
+        XCTAssertNil(try? store.loadEarlyAccess(), "with licensing off nothing is written")
     }
 
     func testDeactivateFreesTheSlot() async {
@@ -220,7 +358,7 @@ final class LicenseManagerTests: XCTestCase {
         let ok = await m.deactivate()
         XCTAssertTrue(ok)
         XCTAssertEqual(server.calls, ["deactivate"])
-        XCTAssertNil(store.load())
+        XCTAssertNil(try? store.load())
         XCTAssertEqual(m.state, .unlicensed(.never))
         m.stop()
     }
@@ -233,10 +371,10 @@ final class LicenseManagerTests: XCTestCase {
         m.start()
         let ok = await m.deactivate()
         XCTAssertFalse(ok)
-        XCTAssertNotNil(store.load())
+        XCTAssertNotNil(try? store.load())
         XCTAssertTrue(m.isUnlocked)
         m.forgetLocally()
-        XCTAssertNil(store.load())
+        XCTAssertNil(try? store.load())
         m.stop()
     }
 
@@ -251,7 +389,7 @@ final class LicenseManagerTests: XCTestCase {
         let ok = await m.activate(key: Vector.key)
         XCTAssertFalse(ok)
         XCTAssertEqual(server.calls, [])
-        XCTAssertNil(store.load())
+        XCTAssertNil(try? store.load())
     }
 }
 

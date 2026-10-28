@@ -30,6 +30,14 @@ final class LockPill {
             .store(in: &cancellables)
     }
 
+    /// `--debug-windows`: shows the pill whatever the state, for its picture.
+    func showForPreview() -> Int? {
+        setVisible(true)
+        return panel?.windowNumber
+    }
+
+    func hidePreview() { setVisible(false) }
+
     private func setVisible(_ visible: Bool) {
         guard visible else {
             panel?.orderOut(nil)

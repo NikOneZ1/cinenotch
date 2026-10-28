@@ -8,6 +8,8 @@ public enum LicenseState: Equatable {
     /// Licensing is on and this Mac has no valid activation.
     case unlicensed(UnlicensedReason)
     case licensed(LicenseSummary)
+    /// Used CineNotch before it was paid: free for good, nothing to activate, nothing checked.
+    case earlySupporter(since: Date)
 }
 
 extension LicenseState {
@@ -16,12 +18,18 @@ extension LicenseState {
         if case .unlicensed = self { return false }
         return true
     }
+
+    var isLicensed: Bool {
+        if case .licensed = self { return true }
+        return false
+    }
 }
 
 public enum UnlicensedReason: Equatable {
     /// Never activated.
     case never
-    /// The server said the license is no longer valid (refunded, disabled, expired, or this Mac was deactivated).
+    /// The server said the license is no longer valid (refunded, disabled, expired, or this Mac was deactivated), twice.
+    /// The key stays: the app keeps asking about once a day, and unlocks if the answer changes.
     case revoked
     /// What was stored didn't check out (another Mac's, or damaged). The key stays so one tap re-activates.
     case storedInvalid
@@ -50,11 +58,18 @@ public struct LicenseSummary: Equatable {
 /// - About every 14 days it asks the server again. If that fails because of the network or the server, nothing happens
 ///   (it tries again a few hours later). Only the server saying "not valid" locks the app.
 /// - After 45 days without a successful check it shows a reminder to go online. Still no lock.
+/// - "Not valid" locks only when the server says it twice, hours apart, and the key is kept: if that was our mistake
+///   (a misconfigured server), the daily check that follows unlocks every Mac again by itself.
+/// - A Mac that used CineNotch before it was paid (`priorInstall`) is an early supporter: free for good.
 @MainActor
 public final class LicenseManager: ObservableObject {
     public static let revalidateInterval: TimeInterval = 14 * 86400
     public static let reminderAfter: TimeInterval = 45 * 86400
     static let retryAfterFailure: TimeInterval = 6 * 3600
+    /// How long a first "not valid" waits for its confirmation.
+    static let confirmRefusalAfter: TimeInterval = 6 * 3600
+    /// How often a locked Mac with a key asks whether it's valid again.
+    static let recheckRevokedEvery: TimeInterval = 86400
     static let pollEvery: TimeInterval = 3600
 
     @Published public private(set) var state: LicenseState = .off
@@ -72,13 +87,19 @@ public final class LicenseManager: ObservableObject {
     private var stored: StoredLicense?
     private var nextAttempt = Date.distantPast
     private var timer: Timer?
+    /// Whether the Keychain has been read. Until then nothing is decided, written or sent.
+    private var loaded = false
+    private var loadAttempts = 0
+    /// This Mac ran an earlier, free version: settings it left behind were found at launch.
+    private let priorInstall: Bool
     /// `--debug-license-state`: the state is fixed and no server or Keychain is involved.
     private let fixedState: LicenseState?
 
     public init(configuration: LicenseConfiguration, store: LicenseStoring, server: LicenseServing,
                 deviceID: String = DeviceIdentity.hash(), deviceLabel: String = DeviceIdentity.model(),
-                now: @escaping () -> Date = Date.init, fixedState: LicenseState? = nil) {
+                now: @escaping () -> Date = Date.init, priorInstall: Bool = false, fixedState: LicenseState? = nil) {
         self.configuration = configuration
+        self.priorInstall = priorInstall
         self.store = store
         self.server = server
         self.deviceID = deviceID
@@ -104,13 +125,57 @@ public final class LicenseManager: ObservableObject {
     /// Reads what's stored, checks it offline, and schedules the soft re-validation.
     public func start() {
         guard fixedState == nil, configuration.isEnforced else { return }
-        stored = store.load()
-        state = evaluate(stored)
-        timer = Timer.scheduledTimer(withTimeInterval: Self.pollEvery, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.revalidateIfDue() }
+        if timer == nil {
+            timer = Timer.scheduledTimer(withTimeInterval: Self.pollEvery, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if self.loaded { await self.revalidateIfDue() } else { self.load() }
+                }
+            }
+            timer?.tolerance = 300
         }
-        timer?.tolerance = 300
-        Task { await revalidateIfDue() }
+        load()
+    }
+
+    /// The Keychain can refuse for a moment (locked right after login, say). That's never read as "not paid":
+    /// the state stays as it was and it tries again shortly.
+    private func load() {
+        do {
+            if try isEarlySupporter() { return }
+            stored = try store.load()
+            loaded = true
+            state = evaluate(stored)
+            Task { await revalidateIfDue() }
+        } catch {
+            loadAttempts += 1
+            LicenseLog.write("license: Keychain not readable (\(error)), trying again")
+            guard loadAttempts < 20 else { return }
+            let delay = min(5 * Double(loadAttempts), 60)
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                self?.retryLoad()
+            }
+        }
+    }
+
+    private func retryLoad() {
+        if !loaded { load() }
+    }
+
+    /// Decided once per Mac, at the first launch of a build with licensing on: did this Mac use CineNotch before?
+    private func isEarlySupporter() throws -> Bool {
+        var decision = try store.loadEarlyAccess()
+        if decision == nil {
+            let made = EarlyAccess(isEarlySupporter: priorInstall, decidedAt: now())
+            // If this can't be saved, nothing is decided: the next try still has this launch's evidence.
+            try store.saveEarlyAccess(made)
+            decision = made
+            LicenseLog.write("license: \(priorInstall ? "used before CineNotch was paid: free for good" : "new on this Mac")")
+        }
+        guard let decision, decision.isEarlySupporter else { return false }
+        loaded = true
+        state = .earlySupporter(since: decision.decidedAt)
+        return true
     }
 
     public func stop() {
@@ -121,6 +186,7 @@ public final class LicenseManager: ObservableObject {
     /// The offline check: a signed token for this Mac and this key.
     func evaluate(_ license: StoredLicense?) -> LicenseState {
         guard let license else { return .unlicensed(.never) }
+        if license.revokedAt != nil { return .unlicensed(.revoked) }
         guard let publicKey = configuration.publicKey, let claims = try? LicenseToken.verify(license.token, publicKey: publicKey),
               claims.dh == deviceID, claims.kh == LicenseHash.sha256Hex(license.key), claims.iid == license.instanceID else {
             return .unlicensed(.storedInvalid)
@@ -143,11 +209,17 @@ public final class LicenseManager: ObservableObject {
             message = "Debug state: no license server."
             return false
         }
-        guard configuration.isEnforced, !isBusy else { return false }
+        guard configuration.isEnforced else { return false }
+        guard loaded else {
+            message = "CineNotch couldn't read its license from the Keychain yet. Try again in a moment."
+            return false
+        }
         guard !key.isEmpty else {
             message = "Paste the license key from your purchase email."
             return false
         }
+        // A background check may be running: wait for it instead of ignoring the click.
+        while isBusy { try? await Task.sleep(nanoseconds: 100_000_000) }
         isBusy = true
         defer { isBusy = false }
         do {
@@ -207,11 +279,18 @@ public final class LicenseManager: ObservableObject {
         state = .unlicensed(.never)
     }
 
-    /// The soft re-validation. Does nothing unless it's due (or `force`).
+    /// A locked Mac that still has its key can ask again (Settings → License → Check Again).
+    public var canRecheck: Bool { stored?.revokedAt != nil }
+
+    /// The soft re-validation. Does nothing unless it's due (or `force`). Also runs, about daily, for a Mac that was
+    /// locked by the server but kept its key.
     public func revalidateIfDue(force: Bool = false) async {
-        guard fixedState == nil, let license = stored, case .licensed = state, !isBusy else { return }
+        guard fixedState == nil, let license = stored, !isBusy else { return }
+        let wasRevoked = license.revokedAt != nil
+        guard wasRevoked || state.isLicensed else { return }
         let n = now()
-        guard force || (n.timeIntervalSince(license.lastValidatedAt) >= Self.revalidateInterval && n >= nextAttempt) else { return }
+        let due = wasRevoked || license.refusedAt != nil || n.timeIntervalSince(license.lastValidatedAt) >= Self.revalidateInterval
+        guard force || (due && n >= nextAttempt) else { return }
         isBusy = true
         defer { isBusy = false }
         do {
@@ -221,20 +300,42 @@ public final class LicenseManager: ObservableObject {
             try? store.save(renewed)
             stored = renewed
             state = evaluate(renewed)
-            LicenseLog.write("license: checked, still valid")
-            if force { message = "Your license is valid." }
+            LicenseLog.write(wasRevoked ? "license: valid again, unlocked" : "license: checked, still valid")
+            if force || wasRevoked { message = wasRevoked ? "Your license is valid again." : "Your license is valid." }
         } catch let error as LicenseServerError where error.isFinal {
-            store.clear()
-            stored = nil
-            state = .unlicensed(.revoked)
-            message = Self.text(for: error, supportEmail: configuration.supportEmail)
-            LicenseLog.write("license: no longer valid (\(error))")
+            refused(license, error: error, at: n, force: force)
         } catch {
             // No network, the server is busy, or its answer wasn't one we can use: keep working, try again later.
-            nextAttempt = now().addingTimeInterval(Self.retryAfterFailure)
-            if force { message = "Couldn't reach the license server. Your license still works." }
+            nextAttempt = now().addingTimeInterval(wasRevoked ? Self.recheckRevokedEvery : Self.retryAfterFailure)
+            if force { message = wasRevoked ? "Couldn't reach the license server. Try again later."
+                                            : "Couldn't reach the license server. Your license still works." }
             LicenseLog.write("license: check failed, will retry (\(error))")
         }
+    }
+
+    /// The server said "not valid". The first time it's only noted; repeated hours later it locks, keeping the key.
+    private func refused(_ license: StoredLicense, error: LicenseServerError, at n: Date, force: Bool) {
+        var updated = license
+        if license.revokedAt != nil {
+            nextAttempt = n.addingTimeInterval(Self.recheckRevokedEvery)
+            if force { message = Self.text(for: error, supportEmail: configuration.supportEmail) }
+            LicenseLog.write("license: still not valid (\(error))")
+            return
+        }
+        if let first = license.refusedAt, n.timeIntervalSince(first) >= Self.confirmRefusalAfter {
+            updated.revokedAt = n
+            state = .unlicensed(.revoked)
+            nextAttempt = n.addingTimeInterval(Self.recheckRevokedEvery)
+            message = Self.text(for: error, supportEmail: configuration.supportEmail)
+            LicenseLog.write("license: no longer valid, confirmed (\(error))")
+        } else {
+            if updated.refusedAt == nil { updated.refusedAt = n }
+            nextAttempt = n.addingTimeInterval(Self.confirmRefusalAfter)
+            if force { message = "The license server says this license isn't valid. CineNotch keeps working and checks again in a few hours." }
+            LicenseLog.write("license: server says not valid (\(error)), will confirm later")
+        }
+        try? store.save(updated)
+        stored = updated
     }
 
     /// The server's token must be signed by us, for this key and this Mac.

@@ -92,6 +92,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 buy: { Licensing.open(license.configuration.buyURL) })
         }
         license.start()
+        if license.configuration.storeAccount == "debug-activation", options.debugLicenseActivate != nil || options.debugLicenseDeactivate {
+            Task { [options] in
+                if let key = options.debugLicenseActivate { await license.activate(key: key) }
+                if options.debugLicenseDeactivate { await license.deactivate() }
+                Log.info("license: debug action done: \(license.state), \(license.message ?? "no message")")
+            }
+        }
 
         pip.$isActive
             .sink { [weak self] active in self?.gaze.isPiPActive = active && !(self?.options.debugDemo ?? false) }
@@ -168,6 +175,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await snap(settings.windowNumber, "settings-\(tab)")
         }
         settings.close()
+        if let lockPill {
+            await snap(lockPill.showForPreview(), "lock-pill")
+            lockPill.hidePreview()
+        }
         GlanceInvite.renderPreviews(into: dir)
     }
 

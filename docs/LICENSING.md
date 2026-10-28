@@ -35,7 +35,21 @@ nothing is sent anywhere, no License tab or lock pill exists. The Worker's endpo
   licensing switched off server-side, a captive portal), nothing happens and it tries again 6 hours
   later. After 45 days without a successful check, Settings → License shows a reminder to go online.
   **The app is never disabled because the network is down.** Only a clear answer from the server
-  (`not_found` or `revoked`, as JSON from the proxy) locks it: that is what a refund looks like.
+  (`not_found` or `revoked`, as JSON from the proxy) locks it: that is what a refund looks like. Even then it
+  has to be said twice, at least 6 hours apart, and the key stays in the Keychain: a locked Mac asks again
+  at launch and about once a day (and on *Check Again*), and unlocks itself if the answer changes. So a
+  server mistake (say, a wrong `CREEM_PRODUCT_ID`) can't wipe out paid Macs; they recover once it's fixed.
+  The proxy also never answers `not_found` for its own problems: a validated key of a product it doesn't
+  list is a 502, and an unknown endpoint is `unknown_endpoint`.
+- A Keychain that can't be read (locked right after login, say) is not "no license": nothing is decided,
+  written or sent until it can be read, and the app retries for a few minutes, then hourly.
+- **Early supporters: free for good.** At the first launch of a build with licensing on, the app looks for
+  what earlier versions leave in its defaults (`onboardingDone`, `onboardingResume` from 0.1.0 on, Sparkle's
+  `SUHasLaunchedBefore` from 0.2.0 on), read at the very start of `main`, before this launch writes any of it.
+  The answer is stored once in the Keychain (`activation.early-access`) and never changes: an early supporter
+  is unlocked for good, never asked for a key and never checked online (the License tab says "Free for good");
+  a new Mac stays new even after its own onboarding writes those defaults. Someone could download an old
+  version first to get in free: like building from source, that's accepted.
 - Unlicensed (licensing on, no activation): the PiP window is not docked and stays an ordinary
   floating window (so the user's video is never taken away), the camera glance doesn't run (it only
   runs while a video is docked), a small "Activate CineNotch to dock this video" pill with *Enter Key*
@@ -70,7 +84,8 @@ From https://docs.creem.io/features/addons/licenses (checked 2026-10-26):
 The docs leave a few things open, so the proxy is defensive about them (see comments in
 `src/license.js`) and **they have never been tried against a real Creem account**: what a repeated
 activation of the same instance name does, what validating a deactivated instance returns, and
-whether `instance` comes as an object or an array. Test them in Creem test mode before go-live.
+whether `instance` comes as an object or an array (the guide shows an array, the API reference an
+object; the proxy takes both). Test them in Creem test mode before go-live.
 
 ## Privacy
 
@@ -111,12 +126,13 @@ Do these in order. Nothing before step 7 changes what users get.
    id in (the product id variable accepts `prod_test,prod_live` while you're moving over), deploy.
 6. **App**: in `Resources/Info.plist` set `LicensePublicKey` to the public key and `LicensingEnabled` to
    `true`; check `LicenseBuyURL` (`https://cinenotch.cam/buy`), `LicenseManageURL` and
-   `LicenseSupportEmail`. Bump `CFBundleShortVersionString` / `CFBundleVersion`.
+   `LicenseSupportEmail`. The paid version is **1.0.0** (the license covers 1.x): bump
+   `CFBundleShortVersionString` / `CFBundleVersion`.
    `scripts/release.sh` refuses to build with licensing on and an empty public key.
-7. **Update the privacy page** with the sentence above (and the permission wording if you like).
-8. **Release** the new version (`scripts/release.sh`, GitHub release, appcast). Existing free installs
-   update to it and show the lock pill: say so in the release notes. Decide beforehand whether early
-   users get keys (see *Decisions*).
+7. **Privacy page**: the license paragraphs are already in `public/privacy.html` as FLIP blocks, so step 9
+   switches them on. Bump its "Updated" date then.
+8. **Release** the new version (`scripts/release.sh`, GitHub release, appcast). Existing installs update
+   to it and stay free (early supporters): say so in the release notes.
 9. **Flip the site** to paid: `python3 scripts/flip-to-paid.py` in the site repo (see its README section
    "Flipping to paid"), set the real Creem checkout URL, publish `/buy`, then the app README.
 10. Keep an eye on the `license` counters (`README.md` in the site repo, *Stats*).
@@ -151,9 +167,14 @@ Developer switches (`Support/LaunchOptions.swift`):
 | `--debug-license-enabled` | licensing on without the Info.plist flag; uses its own Keychain item (`debug-activation`) |
 | `--debug-license-server <url>` | where activation goes |
 | `--debug-license-public-key <base64>` | the key that checks tokens |
-| `--debug-license-state off\|unlicensed\|revoked\|licensed\|stale` | pins the state: see the locked island, menu and License tab. No server, no Keychain |
+| `--debug-license-state off\|unlicensed\|revoked\|licensed\|stale\|early` | pins the state: see the locked island, menu and License tab. No server, no Keychain |
+| `--debug-license-prior-install` | debug runs count as a new install; this makes one an early supporter (if nothing is decided yet) |
+| `--debug-license-reset` | forgets the debug activation and the debug early-supporter decision first (not the slot on the server) |
+| `--debug-license-activate <key>` / `--debug-license-deactivate` | does it at launch, as the License tab would (debug Keychain only); the result is in the log |
 
-`--debug-license-state unlicensed --debug-fake-pip` shows the lock pill and the locked menu.
+`--debug-license-state unlicensed --debug-fake-pip` shows the lock pill and the locked menu. Add
+`--debug-windows <dir>` for pictures of the Settings tabs and the lock pill (without Screen Recording permission the
+windows are drawn from their views, without the title bar).
 A debug-activated Mac holds a slot in the mock/test Creem: deactivate in the License tab afterwards.
 
 ## Decisions to review
@@ -166,7 +187,6 @@ A debug-activated Mac holds a slot in the mock/test Creem: deactivate in the Lic
   reinstalling on the same Mac reuses its slot. A Mac that's wiped or sold should be deactivated first;
   otherwise the slot is freed by hand in Creem's dashboard (or by writing to support).
 - **Refunds.** Creem disables the license on refund: the next check (≤ 14 days, plus hours) locks that Mac.
-- **Existing free users.** Nothing here grants anyone a key. If early users should keep the app free, that needs
-  a separate decision (for example, Creem discount codes, or a grandfathering rule in the Worker).
+- **Existing free users** keep it free for good, automatically (see *Early supporters* above). Decided 2026-10-27.
 - **Locked means not docked, not broken.** The user's video keeps playing in its normal PiP window.
 - **Token lifetime.** 730 days (or the license's own expiry if sooner). Past it the app only reminds.
