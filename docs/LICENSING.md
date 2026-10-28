@@ -73,19 +73,34 @@ From https://docs.creem.io/features/addons/licenses (checked 2026-10-26):
 - Base URLs: live `https://api.creem.io`, test `https://test-api.creem.io`. Header `x-api-key`.
   Keys from Creem dashboard → Settings → API Keys (test and live keys are different).
 - `POST /v1/licenses/activate {key, instance_name}`, `/validate {key, instance_id}`,
-  `/deactivate {key, instance_id}`. Status codes: 400 bad parameters, 401 bad API key, 403 activation
-  limit reached (activate), 404 unknown key or instance, 409 instance already deactivated, 410 revoked
-  or expired (validate). License `status` is `active`, `inactive`, `expired` or `disabled`.
+  `/deactivate {key, instance_id}`. Documented status codes: 400 bad parameters, 401 bad API key, 403
+  activation limit reached (activate), 404 unknown key or instance, 409 instance already deactivated,
+  410 revoked or expired (validate). See below for what test mode really answers. License `status` is `active`, `inactive`, `expired` or `disabled`.
 - The key goes to the customer in the order confirmation page (when the checkout has no success URL),
   the receipt email and the customer portal. Don't set a success URL on the checkout link, or the
   key won't show on the confirmation page.
 - Customer portal for "Manage": https://www.creem.io/my-orders/login (email magic link).
 
-The docs leave a few things open, so the proxy is defensive about them (see comments in
-`src/license.js`) and **they have never been tried against a real Creem account**: what a repeated
-activation of the same instance name does, what validating a deactivated instance returns, and
-whether `instance` comes as an object or an array (the guide shows an array, the API reference an
-object; the proxy takes both). Test them in Creem test mode before go-live.
+What Creem's test mode actually answered (2026-10-28, where it differs from the docs above), and
+what the proxy does about it (`src/license.js`, mirrored in `scripts/mock-creem.mjs`):
+
+- The activation limit is **400** `"Activation limit reached"`, not 403: the proxy turns it into
+  `limit_reached`.
+- Deactivating an instance that's already deactivated is **400** `"... already deactivated"`, not 409:
+  the proxy answers ok.
+- Every activate makes a **new instance**, even with the same name, so re-activating a Mac takes another
+  slot. The proxy avoids that two ways: the app sends the instance it holds for the same key, and the
+  proxy reuses it when it's still active for this Mac; after a fresh activation it lists the license's
+  instances (`GET /v1/licenses/{id}/instances`) and deactivates this Mac's older ones. A Mac that lost
+  its Keychain item when all 3 slots are taken still gets `limit_reached` (free one in the Creem
+  dashboard).
+- Validating a deactivated instance is 200 with `instance.status` `"deactivated"`; `instance` is an
+  object; an unknown key or instance is 404 with `message` as a list of strings.
+- The first test purchase still went to `https://cinenotch.cam/thanks` after the success URL was
+  removed from the product (the checkout itself said `success_url: null`). Check for a store-wide
+  redirect in Creem's settings; `/thanks` points to the email in any case.
+
+Still untested: what a refunded license looks like (status `disabled`? a 410 on validate?).
 
 ## Privacy
 

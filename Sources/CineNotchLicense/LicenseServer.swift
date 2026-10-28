@@ -23,7 +23,9 @@ public enum LicenseServerError: Error, Equatable {
 }
 
 public protocol LicenseServing: Sendable {
-    func activate(key: String, deviceID: String, deviceLabel: String) async throws -> LicenseGrant
+    /// `instanceID`: the activation this Mac already holds for the same key, so the server can reuse it instead of
+    /// taking another slot.
+    func activate(key: String, deviceID: String, deviceLabel: String, instanceID: String?) async throws -> LicenseGrant
     func validate(key: String, instanceID: String, deviceID: String) async throws -> LicenseGrant
     func deactivate(key: String, instanceID: String, deviceID: String) async throws
 }
@@ -47,8 +49,10 @@ public struct HTTPLicenseServer: LicenseServing {
         return URLSession(configuration: config)
     }()
 
-    public func activate(key: String, deviceID: String, deviceLabel: String) async throws -> LicenseGrant {
-        try grant(await post("activate", ["key": key, "device_id": deviceID, "device_label": deviceLabel]))
+    public func activate(key: String, deviceID: String, deviceLabel: String, instanceID: String?) async throws -> LicenseGrant {
+        var body = ["key": key, "device_id": deviceID, "device_label": deviceLabel]
+        body["instance_id"] = instanceID
+        return try grant(await post("activate", body))
     }
 
     public func validate(key: String, instanceID: String, deviceID: String) async throws -> LicenseGrant {

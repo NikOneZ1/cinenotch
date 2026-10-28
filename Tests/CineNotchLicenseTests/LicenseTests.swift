@@ -17,8 +17,13 @@ private final class FakeServer: LicenseServing, @unchecked Sendable {
     var result: Result<LicenseGrant, LicenseServerError>
     var deactivateResult: LicenseServerError?
     var calls: [String] = []
+    var heldInstance: String??
     init(_ result: Result<LicenseGrant, LicenseServerError>) { self.result = result }
-    func activate(key: String, deviceID: String, deviceLabel: String) async throws -> LicenseGrant { calls.append("activate"); return try result.get() }
+    func activate(key: String, deviceID: String, deviceLabel: String, instanceID: String?) async throws -> LicenseGrant {
+        calls.append("activate")
+        heldInstance = instanceID
+        return try result.get()
+    }
     func validate(key: String, instanceID: String, deviceID: String) async throws -> LicenseGrant { calls.append("validate"); return try result.get() }
     func deactivate(key: String, instanceID: String, deviceID: String) async throws {
         calls.append("deactivate")
@@ -31,7 +36,7 @@ private final class SlowServer: LicenseServing, @unchecked Sendable {
     let grant: LicenseGrant
     var calls: [String] = []
     init(_ grant: LicenseGrant) { self.grant = grant }
-    func activate(key: String, deviceID: String, deviceLabel: String) async throws -> LicenseGrant { calls.append("activate"); return grant }
+    func activate(key: String, deviceID: String, deviceLabel: String, instanceID: String?) async throws -> LicenseGrant { calls.append("activate"); return grant }
     func validate(key: String, instanceID: String, deviceID: String) async throws -> LicenseGrant {
         calls.append("validate")
         try await Task.sleep(nanoseconds: 300_000_000)
@@ -143,6 +148,20 @@ final class LicenseManagerTests: XCTestCase {
         XCTAssertTrue(ok)
         XCTAssertTrue(m.isUnlocked)
         XCTAssertEqual(try? store.load()?.key, Vector.key)
+        m.stop()
+    }
+
+    func testActivatingTheSameKeyAgainOffersTheHeldInstance() async {
+        // Creem makes a new instance on every activation: the Worker reuses the held one instead of taking a slot.
+        var license = stored()
+        license.revokedAt = Vector.issued
+        let server = FakeServer(.success(grant))
+        let m = manager(MemoryLicenseStore(license), server)
+        m.start()
+        await m.activate(key: Vector.key)
+        XCTAssertEqual(server.heldInstance, .some("inst_vec"))
+        await m.activate(key: "ANOTHER-KEY-0002")
+        XCTAssertEqual(server.heldInstance, .some(nil), "another key has nothing to reuse")
         m.stop()
     }
 

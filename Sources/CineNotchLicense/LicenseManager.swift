@@ -223,7 +223,8 @@ public final class LicenseManager: ObservableObject {
         isBusy = true
         defer { isBusy = false }
         do {
-            let grant = try await server.activate(key: key, deviceID: deviceID, deviceLabel: deviceLabel)
+            let held = stored?.key == key ? stored?.instanceID : nil
+            let grant = try await server.activate(key: key, deviceID: deviceID, deviceLabel: deviceLabel, instanceID: held)
             let license = try accept(grant, key: key, activatedAt: now())
             try? store.save(license)
             stored = license
