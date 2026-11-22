@@ -22,7 +22,19 @@ for triple in "${TRIPLES[@]}"; do
   [[ -n "$triple" ]] && args+=(--triple "$triple")
   swift build "${args[@]}" --product CineNotch
   swift build "${args[@]}" --product NowPlayingBridge
-  BIN_DIRS+=("$(swift build "${args[@]}" --show-bin-path)")
+  # Newer Swift reports a shared .build/out/Products path for every --triple, so the
+  # second arch overwrites the first and lipo sees two copies of one architecture.
+  # Per-triple products still land in .build/<arch>-apple-macosx/<config>.
+  shown=$(swift build "${args[@]}" --show-bin-path)
+  classic=""
+  if [[ -n "$triple" ]]; then
+    classic=".build/${triple/macosx*/macosx}/${CONFIG}"
+  fi
+  if [[ -n "$classic" && -d "$classic" ]]; then
+    BIN_DIRS+=("$classic")
+  else
+    BIN_DIRS+=("$shown")
+  fi
 done
 
 rm -rf "$APP"
