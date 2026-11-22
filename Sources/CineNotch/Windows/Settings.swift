@@ -93,6 +93,51 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     }
 }
 
+// MARK: Pane sizing
+
+/// Every pane is 480 wide. A Form pane is as tall as its content up to `PaneScroll.maxHeight`, and
+/// scrolls past that, so the window (non-resizable, sized from each tab's preferredContentSize) always
+/// fits on the screen, even a 1440x900 one, while short panes stay snug.
+private struct PaneScroll: ViewModifier {
+    static let width: CGFloat = 480
+
+    /// The tallest a pane gets: the screen's usable height less room for the window's title bar and
+    /// toolbar (~80pt) and a small gap, never below 300.
+    @MainActor static var maxHeight: CGFloat {
+        let visible = NSScreen.main?.visibleFrame.height ?? 800
+        return max(300, visible - 120)
+    }
+
+    @State private var contentHeight: CGFloat?
+
+    func body(content: Content) -> some View {
+        ScrollView(.vertical) {
+            content
+                .frame(width: Self.width)
+                // The Form's full height; the ScrollView, not the Form, does any scrolling.
+                .fixedSize(horizontal: false, vertical: true)
+                .scrollDisabled(true)
+                .background(GeometryReader { proxy in
+                    Color.clear.preference(key: PaneHeightKey.self, value: proxy.size.height)
+                })
+        }
+        .frame(width: Self.width, height: min(contentHeight ?? Self.maxHeight, Self.maxHeight))
+        .onPreferenceChange(PaneHeightKey.self) { height in
+            if height > 0 { contentHeight = height }
+        }
+    }
+}
+
+private struct PaneHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+private extension View {
+    /// See `PaneScroll`.
+    func paneScroll() -> some View { modifier(PaneScroll()) }
+}
+
 // MARK: General
 
 private struct GeneralPane: View {
@@ -173,8 +218,7 @@ private struct GeneralPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480)
-        .fixedSize(horizontal: false, vertical: true)
+        .paneScroll()
         .onAppear { checksForUpdates = updates.automaticallyChecks }
         .onReceive(poll) { _ in
             loginItem.refresh()
@@ -214,8 +258,7 @@ private struct KeyboardPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480)
-        .fixedSize(horizontal: false, vertical: true)
+        .paneScroll()
     }
 }
 
@@ -269,8 +312,7 @@ private struct GazePane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480)
-        .fixedSize(horizontal: false, vertical: true)
+        .paneScroll()
     }
 }
 
@@ -504,8 +546,7 @@ private struct LicensePane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480)
-        .fixedSize(horizontal: false, vertical: true)
+        .paneScroll()
         .confirmationDialog("Deactivate CineNotch on this Mac?", isPresented: $confirmingDeactivate) {
             Button("Deactivate", role: .destructive) { Task { await license.deactivate() } }
             Button("Cancel", role: .cancel) {}
