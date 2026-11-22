@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var started = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        MainMenu.install()
         Log.info("launch \(Bundle.main.bundlePath) args=\(CommandLine.arguments.dropFirst())")
         let island = IslandController(pip: pip, options: options)
         // The demo plays its own glances; the camera stays out of it.

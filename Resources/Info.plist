@@ -15,15 +15,15 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.7.0</string>
+	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
-	<string>7</string>
-	<!-- Licensing (docs/LICENSING.md). Off: the app is fully free and unrestricted, nothing is checked or sent.
-	     To go paid: set LicensingEnabled to true and put the base64 Ed25519 public key in LicensePublicKey. -->
+	<string>8</string>
+	<!-- Licensing (docs/LICENSING.md). On from 1.0.0. LicensePublicKey is the base64 Ed25519 public key of the live
+	     Worker's signing key; until it's filled in the app runs unlocked and scripts/release.sh refuses to build. -->
 	<key>LicensingEnabled</key>
-	<false/>
+	<true/>
 	<key>LicensePublicKey</key>
-	<string></string>
+	<string>+G6dgU+DY3hLGU/hXS55oLK4n8lEq5d/biYmMNZf59A=</string>
 	<key>LicenseServerURL</key>
 	<string>https://cinenotch.cam</string>
 	<key>LicenseBuyURL</key>
