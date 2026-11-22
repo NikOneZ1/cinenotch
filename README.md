@@ -68,7 +68,9 @@ anchor of the Pricing section below.
 $14.99, with no subscription. One license covers up to 3 of your Macs and every 1.x update, and
 there's a 30-day money-back guarantee instead of a free trial. Payments go through
 [Creem](https://creem.io), which emails you a license key.
-License key entry isn't built yet: once it ships, say here where the key goes.
+License key entry is built but switched off: see docs/LICENSING.md. When it's on, say here that the key goes in
+Settings → License.
+TODO(licensing): README must keep saying "free for now" until LicensingEnabled ships as true.
 -->
 From 0.2.0 on it updates itself with [Sparkle](https://sparkle-project.org): once a day it checks
 `cinenotch.cam/appcast.xml` (Settings → General turns that off), and **Check for Updates…** is

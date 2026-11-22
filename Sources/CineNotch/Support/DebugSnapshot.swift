@@ -19,9 +19,21 @@ enum DebugSnapshot {
                                                                        configuration: config)
                 write(image, to: url)
             } catch {
-                Log.info("debug window snapshot failed: \(error.localizedDescription)")
+                // No Screen Recording permission for this build: draw the window's own views instead (no title bar).
+                if let image = drawWindow(windowID) {
+                    write(image, to: url)
+                } else {
+                    Log.info("debug window snapshot failed: \(error.localizedDescription)")
+                }
             }
         }
+    }
+
+    @MainActor private static func drawWindow(_ windowID: CGWindowID) -> CGImage? {
+        guard let view = NSApp.window(withWindowNumber: Int(windowID))?.contentView,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        return rep.cgImage
     }
 
     private static func write(_ image: CGImage, to url: URL) {

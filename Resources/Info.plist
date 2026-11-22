@@ -18,6 +18,20 @@
 	<string>0.7.0</string>
 	<key>CFBundleVersion</key>
 	<string>7</string>
+	<!-- Licensing (docs/LICENSING.md). Off: the app is fully free and unrestricted, nothing is checked or sent.
+	     To go paid: set LicensingEnabled to true and put the base64 Ed25519 public key in LicensePublicKey. -->
+	<key>LicensingEnabled</key>
+	<false/>
+	<key>LicensePublicKey</key>
+	<string></string>
+	<key>LicenseServerURL</key>
+	<string>https://cinenotch.cam</string>
+	<key>LicenseBuyURL</key>
+	<string>https://cinenotch.cam/buy</string>
+	<key>LicenseManageURL</key>
+	<string>https://www.creem.io/my-orders/login</string>
+	<key>LicenseSupportEmail</key>
+	<string>hello@cinenotch.cam</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>

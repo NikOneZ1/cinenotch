@@ -1,0 +1,68 @@
+import AppKit
+import CineNotchLicense
+import Foundation
+
+/// Sets licensing up from Info.plist (`LicensingEnabled`, see docs/LICENSING.md) and the `--debug-license-*` options.
+/// With `LicensingEnabled` false (every build until the paid version ships) the manager is inert:
+/// the app is unrestricted, nothing is read from the Keychain and nothing is sent anywhere.
+enum Licensing {
+    /// This Mac ran a CineNotch from before it was paid, so it's an early supporter (free for good). The evidence is
+    /// what earlier versions leave in the defaults: onboarding (every version since 0.1.0) and Sparkle's first-launch
+    /// flag (0.2.0 on). `notePriorInstall` reads it at the very start of `main`, before this launch writes any of it.
+    @MainActor private(set) static var priorInstall = false
+
+    @MainActor static func notePriorInstall() {
+        let defaults = UserDefaults.standard
+        priorInstall = ["onboardingDone", "onboardingResume", "SUHasLaunchedBefore"].contains { defaults.object(forKey: $0) != nil }
+    }
+
+    @MainActor static func makeManager(options: LaunchOptions) -> LicenseManager {
+        LicenseLog.sink = { Log.info($0) }
+        let info = Bundle.main.infoDictionary
+        var configuration = LicenseConfiguration(info: info,
+                                                 enabledOverride: options.debugLicenseEnabled ? true : nil,
+                                                 serverOverride: options.debugLicenseServer,
+                                                 publicKeyOverride: options.debugLicensePublicKey)
+        let isDebug = options.debugLicenseEnabled || options.debugLicenseServer != nil || options.debugLicensePublicKey != nil
+        if isDebug { configuration.storeAccount = "debug-activation" }
+        let store = KeychainLicenseStore(account: configuration.storeAccount)
+        if isDebug, options.debugLicenseReset {
+            store.clear()
+            store.clearEarlyAccess()
+        }
+        if case .misconfigured(let reason) = configuration.mode {
+            Log.info("license: LicensingEnabled is on but \(reason), so the app stays unrestricted")
+        }
+        let fixed = options.debugLicenseState.flatMap(fixedState)
+        if options.debugLicenseState != nil, fixed == nil {
+            Log.info("license: unknown --debug-license-state '\(options.debugLicenseState ?? "")'")
+        }
+        let manager = LicenseManager(configuration: configuration,
+                                     store: store,
+                                     server: HTTPLicenseServer(baseURL: configuration.serverURL),
+                                     // A debug run on a Mac that had CineNotch would otherwise never see the paid flow.
+                                     priorInstall: isDebug ? options.debugLicensePriorInstall : priorInstall,
+                                     fixedState: fixed)
+        Log.info("license: \(manager.isEnforced ? "on" : "off")\(isDebug ? " (debug)" : "")")
+        return manager
+    }
+
+    private static func fixedState(_ name: String) -> LicenseState? {
+        let day: TimeInterval = 86400
+        let summary = { (stale: Bool) in
+            LicenseSummary(keyHint: "…ABCD", activatedAt: Date().addingTimeInterval(-30 * day),
+                           lastValidatedAt: Date().addingTimeInterval(-(stale ? 60 : 3) * day), needsReconnect: stale)
+        }
+        switch name {
+        case "off": return .off
+        case "unlicensed", "locked": return .unlicensed(.never)
+        case "revoked": return .unlicensed(.revoked)
+        case "licensed": return .licensed(summary(false))
+        case "stale": return .licensed(summary(true))
+        case "early": return .earlySupporter(since: Date().addingTimeInterval(-90 * day))
+        default: return nil
+        }
+    }
+
+    static func open(_ url: URL) { NSWorkspace.shared.open(url) }
+}

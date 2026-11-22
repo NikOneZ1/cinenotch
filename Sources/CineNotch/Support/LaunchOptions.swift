@@ -29,6 +29,24 @@ struct LaunchOptions {
     /// Island animations at a fifth of their speed, to look at them (and snapshot them) frame by frame.
     var debugSlowMotion = false
 
+    /// Licensing is off in every build until `LicensingEnabled` is switched on in Info.plist. These four try it without that.
+    /// `--debug-license-enabled`: licensing on, with its own Keychain item so a real activation is never touched.
+    var debugLicenseEnabled = false
+    /// `--debug-license-server <url>`: where activation goes, for a local Worker (`wrangler dev`), e.g. http://127.0.0.1:8787.
+    var debugLicenseServer: URL?
+    /// `--debug-license-public-key <base64>`: the Ed25519 public key that checks the tokens, for a local Worker's test keys.
+    var debugLicensePublicKey: String?
+    /// `--debug-license-state <off|unlicensed|revoked|licensed|stale|early>`: pin the license state, to see the locked island, the
+    /// menu and the License tab. No server, no Keychain.
+    var debugLicenseState: String?
+    /// `--debug-license-prior-install`: debug runs count as a new install unless this says it used an earlier version.
+    var debugLicensePriorInstall = false
+    /// `--debug-license-reset`: forget the debug activation and the debug early-supporter decision first.
+    var debugLicenseReset = false
+    /// `--debug-license-activate <key>` / `--debug-license-deactivate`: do it at launch, as the License tab would. Debug Keychain only.
+    var debugLicenseActivate: String?
+    var debugLicenseDeactivate = false
+
     static let current: LaunchOptions = {
         var options = LaunchOptions()
         var args = CommandLine.arguments.dropFirst().makeIterator()
@@ -46,6 +64,18 @@ struct LaunchOptions {
                 if let name = args.next() { options.debugDemoScene = name }
             case "--debug-record":
                 if let path = args.next() { options.debugRecordURL = URL(fileURLWithPath: path) }
+            case "--debug-license-enabled": options.debugLicenseEnabled = true
+            case "--debug-license-server":
+                if let text = args.next() { options.debugLicenseServer = URL(string: text) }
+            case "--debug-license-public-key":
+                if let key = args.next() { options.debugLicensePublicKey = key }
+            case "--debug-license-state":
+                if let name = args.next() { options.debugLicenseState = name }
+            case "--debug-license-prior-install": options.debugLicensePriorInstall = true
+            case "--debug-license-reset": options.debugLicenseReset = true
+            case "--debug-license-activate":
+                if let key = args.next() { options.debugLicenseActivate = key }
+            case "--debug-license-deactivate": options.debugLicenseDeactivate = true
             case "--debug-slow-motion": options.debugSlowMotion = true
             case "--debug-overlay":
                 if let path = args.next() { options.debugOverlayDir = URL(fileURLWithPath: path) }
