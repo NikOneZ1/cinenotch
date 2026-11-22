@@ -12,13 +12,25 @@
 # SPARKLE_KEY_FILE on CI. RELEASE_NOTES may point to a text file of "- " lines for the update window.
 # RESUME=1 picks up build/CineNotch.app that was already submitted (say, the wait was cut off):
 # it skips building and notarizing the app, staples its ticket and carries on with the image.
+# VERIFY_ONLY=1 runs only the prechecks, the universal build and scripts/verify-build.sh, then stops:
+# no Developer ID or notarytool credentials needed (signs with IDENTITY or the local dev identity,
+# like scripts/build.sh), and nothing is notarized, stapled or uploaded.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP="build/CineNotch.app"
 DMG="build/CineNotch.dmg"
 PROFILE="${NOTARY_PROFILE:-cinenotch-notary}"
-IDENTITY="${IDENTITY:-$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: .*\)"$/\1/p' | head -1)}"
+VERIFY_ONLY="${VERIFY_ONLY:-0}"
+if [[ "$VERIFY_ONLY" == 1 && "${RESUME:-0}" == 1 ]]; then
+  echo "error: VERIFY_ONLY=1 builds the app, so it can't be combined with RESUME=1." >&2
+  exit 1
+fi
+if [[ "$VERIFY_ONLY" == 1 ]]; then
+  IDENTITY="${IDENTITY:-CineNotch Dev}"
+else
+  IDENTITY="${IDENTITY:-$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: .*\)"$/\1/p' | head -1)}"
+fi
 if [[ -z "$IDENTITY" ]]; then
   echo "error: no \"Developer ID Application\" identity in the keychain." >&2
   exit 1
@@ -46,7 +58,7 @@ else
   AUTH=(--keychain-profile "$PROFILE")
 fi
 # Fail now rather than after the build. macOS hides the saved profile while the screen is locked.
-if ! xcrun notarytool history "${AUTH[@]}" >/dev/null 2>&1; then
+if [[ "$VERIFY_ONLY" != 1 ]] && ! xcrun notarytool history "${AUTH[@]}" >/dev/null 2>&1; then
   echo "error: notarytool can't sign in (no \"$PROFILE\" profile, or the screen is locked)." >&2
   exit 1
 fi
@@ -66,9 +78,18 @@ notarize() {
 }
 
 if [[ "${RESUME:-0}" != 1 ]]; then
-  # 1. The app: universal, hardened runtime, secure timestamp.
-  IDENTITY="$IDENTITY" UNIVERSAL=1 TIMESTAMP=1 ./scripts/build.sh
+  # 1. The app: universal, hardened runtime, secure timestamp (not for VERIFY_ONLY's local signature).
+  START=$(date +%s)
+  TS=1
+  [[ "$VERIFY_ONLY" == 1 ]] && TS=0
+  IDENTITY="$IDENTITY" UNIVERSAL=1 TIMESTAMP="$TS" ./scripts/build.sh
+  # The guard, again, before anything leaves this Mac: fresh executable, both archs, licensing code.
+  REQUIRE_ARCHS="arm64 x86_64" ./scripts/verify-build.sh "$APP" "$START"
   codesign --verify --strict --deep "$APP"
+  if [[ "$VERIFY_ONLY" == 1 ]]; then
+    echo "VERIFY_ONLY: build and guard passed, nothing notarized or published"
+    exit 0
+  fi
 
   # 2. Notarize the app itself, so it opens even offline once copied out of the image.
   ZIP="build/CineNotch-notarize.zip"
@@ -76,6 +97,9 @@ if [[ "${RESUME:-0}" != 1 ]]; then
   ditto -c -k --keepParent "$APP" "$ZIP"
   notarize "$ZIP"
   rm -f "$ZIP"
+else
+  # Resuming: no build ran, so only the contents are checked (any age, both archs, licensing code).
+  REQUIRE_ARCHS="arm64 x86_64" ./scripts/verify-build.sh "$APP" 0
 fi
 xcrun stapler staple -q "$APP"
 
