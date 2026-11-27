@@ -21,13 +21,14 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private let hotKeys: HotKeys
     private let updates: Updates
     private let license: LicenseManager
+    private let gate: FeatureGate
     private let calibrate: () -> Void
     private var window: NSWindow?
     private var tabs: NSTabViewController?
 
     init(gaze: GazeController, island: IslandController, collapsePause: CollapsePause, awayPause: AwayPause,
          onlookerHide: OnlookerHide, loginItem: LoginItem, hotKeys: HotKeys, updates: Updates, license: LicenseManager,
-         calibrate: @escaping () -> Void) {
+         gate: FeatureGate, calibrate: @escaping () -> Void) {
         self.gaze = gaze
         self.island = island
         self.collapsePause = collapsePause
@@ -37,6 +38,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         self.hotKeys = hotKeys
         self.updates = updates
         self.license = license
+        self.gate = gate
         self.calibrate = calibrate
     }
 
@@ -69,7 +71,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         })))
         tabs.addTabViewItem(item("Keyboard", symbol: "keyboard", KeyboardPane(hotKeys: hotKeys)))
         if license.isEnforced {
-            tabs.addTabViewItem(item("License", symbol: "key", LicensePane(license: license)))
+            tabs.addTabViewItem(item("License", symbol: "key", LicensePane(license: license, gate: gate)))
         }
         tabs.addTabViewItem(item("About", symbol: "info.circle", AboutPane()))
         let window = NSWindow(contentViewController: tabs)
@@ -448,7 +450,9 @@ private struct AboutPane: View {
 /// Only exists while licensing is on (`LicensingEnabled`). See docs/LICENSING.md.
 private struct LicensePane: View {
     @ObservedObject var license: LicenseManager
+    @ObservedObject var gate: FeatureGate
     @State private var key = ""
+    @FocusState private var keyFocused: Bool
     @State private var confirmingDeactivate = false
 
     var body: some View {
@@ -501,6 +505,19 @@ private struct LicensePane: View {
                 Section {
                     Text(heading(reason))
                         .font(.system(size: 13, weight: .semibold))
+                    if let daysLeft = gate.trialStatus.daysLeftText {
+                        LabeledContent {
+                            Text(daysLeft)
+                                .font(.system(size: 13, weight: .semibold))
+                        } label: {
+                            Text("Free trial")
+                            Text("Everything works during the trial. Enter a license key any time to keep it that way.")
+                        }
+                    } else if gate.trialStatus.isExpired {
+                        Text("Buy a license to keep docking videos, or enter the key from your purchase email.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
                     if license.canRecheck {
                         HStack {
                             Text("If that's a mistake, CineNotch rechecks once a day and unlocks by itself.")
@@ -517,15 +534,27 @@ private struct LicensePane: View {
                     TextField("License key", text: $key)
                         .textFieldStyle(.roundedBorder)
                         .disableAutocorrection(true)
+                        .focused($keyFocused)
                         .onSubmit(activate)
+                        // After the trial the key field is what this tab is for: ready to paste into.
+                        .onAppear { if gate.trialStatus.isExpired { keyFocused = true } }
                     HStack {
                         Button("Activate", action: activate)
                             .buttonStyle(AccentButtonStyle())
                             .disabled(license.isBusy || key.trimmingCharacters(in: .whitespaces).isEmpty)
                         if license.isBusy { ProgressView().controlSize(.small) }
                         Spacer()
-                        Button("Buy CineNotch…") { Licensing.open(license.configuration.buyURL) }
-                            .buttonStyle(.link)
+                        if reason == .never, gate.trialStatus.isExpired {
+                            // After the trial it's one of the two things this tab is for: a button, not a link.
+                            Button("Buy license") { Licensing.open(TrialManager.buyURL) }
+                                .buttonStyle(.bordered)
+                        } else if reason == .never {
+                            Button("Buy license") { Licensing.open(TrialManager.buyURL) }
+                                .buttonStyle(.link)
+                        } else {
+                            Button("Buy CineNotch…") { Licensing.open(license.configuration.buyURL) }
+                                .buttonStyle(.link)
+                        }
                     }
                 }
             case .off:
@@ -562,7 +591,12 @@ private struct LicensePane: View {
 
     private func heading(_ reason: UnlicensedReason) -> String {
         switch reason {
-        case .never: return "Enter your license key to unlock CineNotch"
+        case .never:
+            switch gate.trialStatus {
+            case .active: return "You're trying CineNotch"
+            case .expired: return "Your free trial has ended"
+            case .inactive: return "Enter your license key to unlock CineNotch"
+            }
         case .revoked: return "This license is no longer valid"
         case .storedInvalid: return "This Mac needs to be activated again"
         }

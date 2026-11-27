@@ -41,8 +41,12 @@ struct LaunchOptions {
     var debugLicenseState: String?
     /// `--debug-license-prior-install`: debug runs count as a new install unless this says it used an earlier version.
     var debugLicensePriorInstall = false
-    /// `--debug-license-reset`: forget the debug activation and the debug early-supporter decision first.
+    /// `--debug-license-reset`: forget the debug activation, the debug early-supporter decision and the debug trial first.
     var debugLicenseReset = false
+    /// `--debug-trial-reset`: forget the debug trial (its own Keychain item and defaults keys) first. Never the real one.
+    var debugTrialReset = false
+    /// `--debug-trial-days-left <n>`: pin the trial for this run, n > 0 days left or 0 for ended. Nothing is stored.
+    var debugTrialDaysLeft: Int?
     /// `--debug-license-activate <key>` / `--debug-license-deactivate`: do it at launch, as the License tab would. Debug Keychain only.
     var debugLicenseActivate: String?
     var debugLicenseDeactivate = false
@@ -73,6 +77,9 @@ struct LaunchOptions {
                 if let name = args.next() { options.debugLicenseState = name }
             case "--debug-license-prior-install": options.debugLicensePriorInstall = true
             case "--debug-license-reset": options.debugLicenseReset = true
+            case "--debug-trial-reset": options.debugTrialReset = true
+            case "--debug-trial-days-left":
+                if let text = args.next(), let days = Int(text) { options.debugTrialDaysLeft = max(0, days) }
             case "--debug-license-activate":
                 if let key = args.next() { options.debugLicenseActivate = key }
             case "--debug-license-deactivate": options.debugLicenseDeactivate = true

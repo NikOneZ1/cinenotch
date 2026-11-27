@@ -1,5 +1,4 @@
 import AppKit
-import CineNotchLicense
 import Combine
 import SwiftUI
 
@@ -15,7 +14,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let awayPause: AwayPause
     private let onlookerHide: OnlookerHide
     private let updates: Updates
-    private let license: LicenseManager
+    private let gate: FeatureGate
     private let thumbnail: () -> CGImage?
     private let showPermissions: () -> Void
     private let showSettings: () -> Void
@@ -25,7 +24,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private var cancellables = Set<AnyCancellable>()
 
     init(pip: PiPController, gaze: GazeController, island: IslandController, collapsePause: CollapsePause, awayPause: AwayPause,
-         onlookerHide: OnlookerHide, updates: Updates, license: LicenseManager,
+         onlookerHide: OnlookerHide, updates: Updates, gate: FeatureGate,
          thumbnail: @escaping () -> CGImage?,
          showPermissions: @escaping () -> Void, showSettings: @escaping () -> Void, showLicense: @escaping () -> Void,
          calibrate: @escaping () -> Void, testGaze: @escaping () -> Void) {
@@ -36,7 +35,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         self.awayPause = awayPause
         self.onlookerHide = onlookerHide
         self.updates = updates
-        self.license = license
+        self.gate = gate
         self.thumbnail = thumbnail
         self.showPermissions = showPermissions
         self.showSettings = showSettings
@@ -66,13 +65,25 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             menu.addItem(.separator())
         }
 
-        // Only while licensing is on and this Mac isn't activated: the core features wait, the rest of the menu stays.
-        if !license.isUnlocked {
-            menu.addItem(makeItem("Enter License Key…", #selector(enterLicenseKey), symbol: "key"))
-            menu.addItem(makeItem("Buy CineNotch…", #selector(buy), symbol: "cart"))
+        // Only while licensing is on and this Mac isn't activated (nor in its trial): the core features wait, the rest of the menu stays.
+        if !gate.isUnlocked {
+            if gate.isNeverActivated {
+                // A new Mac, its trial over: buy a license, or enter the key from the purchase email.
+                menu.addItem(makeItem("Buy license", #selector(buy), symbol: "cart"))
+                menu.addItem(makeItem("Enter key", #selector(enterLicenseKey), symbol: "key"))
+            } else {
+                menu.addItem(makeItem("Enter License Key…", #selector(enterLicenseKey), symbol: "key"))
+                menu.addItem(makeItem("Buy CineNotch…", #selector(buy), symbol: "cart"))
+            }
             menu.addItem(.separator())
             addFooter(to: menu, developer: developer)
             return
+        }
+
+        // During the 7-day trial everything works; this says how long, and opens the License tab.
+        if let daysLeft = gate.trialStatus.daysLeftText {
+            menu.addItem(makeItem("Free trial: \(daysLeft)", #selector(enterLicenseKey), symbol: "clock"))
+            menu.addItem(.separator())
         }
 
         menu.addItem(NSMenuItem.sectionHeader(title: "Glance at the Camera"))
@@ -158,8 +169,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private func nowPlaying() -> NSMenuItem {
         let state: NowPlayingCard.State
-        if !license.isUnlocked {
-            state = .locked
+        if !gate.isUnlocked {
+            state = .locked(trialEnded: gate.trialStatus.isExpired)
         } else if !Permissions.allGranted {
             state = .needsPermissions
         } else if pip.isActive {
@@ -189,7 +200,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     @objc private func openPermissions() { showPermissions() }
     @objc private func openSettings() { showSettings() }
     @objc private func enterLicenseKey() { showLicense() }
-    @objc private func buy() { Licensing.open(license.configuration.buyURL) }
+    @objc private func buy() { Licensing.open(gate.buyURL) }
     @objc private func checkForUpdates() { updates.checkForUpdates() }
     @objc private func startCalibration() { calibrate() }
     @objc private func startGazeTest() { testGaze() }
@@ -227,8 +238,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 private struct NowPlayingCard: View {
     enum State {
         case needsPermissions
-        /// Licensing is on and this Mac isn't activated.
-        case locked
+        /// Licensing is on and this Mac isn't activated, nor in its trial.
+        case locked(trialEnded: Bool)
         case waiting
         case released(title: String)
         /// `isPlaying` is nil when the window doesn't tell (Chrome).
@@ -289,6 +300,7 @@ private struct NowPlayingCard: View {
 
     private var title: String {
         switch state {
+        case .locked(trialEnded: true): return "Your free trial has ended"
         case .locked: return "CineNotch isn't activated"
         case .needsPermissions: return "CineNotch needs two permissions"
         case .waiting: return "No video yet"
@@ -298,6 +310,7 @@ private struct NowPlayingCard: View {
 
     private var detail: String {
         switch state {
+        case .locked(trialEnded: true): return "Buy a license or enter your key to dock videos."
         case .locked: return "Enter your license key to dock videos."
         case .needsPermissions: return "Allow them to dock the video."
         case .waiting: return "Start Picture in Picture in Safari or Chrome."

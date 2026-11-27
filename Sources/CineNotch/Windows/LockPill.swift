@@ -1,9 +1,8 @@
 import AppKit
-import CineNotchLicense
 import Combine
 import SwiftUI
 
-/// While licensing is on and this Mac isn't activated, a Picture in Picture video can't be docked. This says so, politely:
+/// While licensing is on and this Mac isn't activated (and not in its 7-day trial), a Picture in Picture video can't be docked. This says so, politely:
 /// a small pill under the top edge, shown only while there's a video it could have been, with "Buy" and "Enter Key".
 /// "Not now" hides it until the next video. It never exists with licensing off.
 @MainActor
@@ -11,21 +10,20 @@ final class LockPill {
     private var panel: NSPanel?
     private var dismissed = false
     private var cancellables = Set<AnyCancellable>()
-    private let license: LicenseManager
     private let enterKey: () -> Void
     private let buy: () -> Void
 
-    init(license: LicenseManager, pip: PiPController, enterKey: @escaping () -> Void, buy: @escaping () -> Void) {
-        self.license = license
+    /// `buy` opens the trial's page for a Mac that was never activated (see `FeatureGate.buyURL`).
+    init(gate: FeatureGate, pip: PiPController, enterKey: @escaping () -> Void, buy: @escaping () -> Void) {
         self.enterKey = enterKey
         self.buy = buy
-        license.$state
+        gate.$isUnlocked
             .combineLatest(pip.$lockedVideoPresent)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] state, present in
+            .sink { [weak self] unlocked, present in
                 guard let self else { return }
                 if !present { dismissed = false }
-                setVisible(!state.isUnlocked && present && !dismissed)
+                setVisible(!unlocked && present && !dismissed)
             }
             .store(in: &cancellables)
     }

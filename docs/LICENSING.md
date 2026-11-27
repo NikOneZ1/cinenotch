@@ -1,7 +1,7 @@
 # Licensing
 
 CineNotch's paid version is a **$14.99 one-time license**: up to 3 Macs, every 1.x update, no
-subscription, no trial. The key arrives by email from [Creem](https://creem.io), the merchant of
+subscription. A new Mac gets a **7-day free trial** with everything unlocked, then the soft lock below. The key arrives by email from [Creem](https://creem.io), the merchant of
 record. The source stays public under the GPLv3, so the gate is deliberately light: it keeps honest
 people honest, nothing more. There is no obfuscation and no anti-tamper, and anyone can build the app
 from source.
@@ -50,16 +50,39 @@ nothing is sent anywhere, no License tab or lock pill exists. The Worker's endpo
   is unlocked for good, never asked for a key and never checked online (the License tab says "Free for good");
   a new Mac stays new even after its own onboarding writes those defaults. Someone could download an old
   version first to get in free: like building from source, that's accepted.
-- Unlicensed (licensing on, no activation): the PiP window is not docked and stays an ordinary
+- **7-day trial.** A Mac that was never activated and isn't an early supporter gets every feature for 7 days from
+  its first launch of a build with licensing on. It needs no network and no account. Details:
+  - The start date and the last time the app ran (`TrialRecord`) are stored twice: a Keychain item
+    (`activation.trial`, same service and `AfterFirstUnlockThisDeviceOnly` as the license) and the defaults
+    (`CNTrialStart`, `CNTrialLastSeen`). Deleting one doesn't reset the trial: the other restores it and is written
+    back. If the two disagree, the earlier start and the later last-seen win, and both are rewritten.
+  - Days left count from `max(now, last-seen)`, so setting the clock back doesn't add days (the count just waits
+    until the clock catches up), and a clock set to before the start doesn't start a new 7 days. Last-seen never
+    moves back. "7 days left" on the first day, one less per full 24 hours, "1 day left" on the last day, ended at
+    exactly 7 × 24 hours.
+  - A Keychain that can't be read is not "no trial": nothing new is recorded until it can be.
+  - It's decided once per launch, on the first real license state (after the Keychain is read). Licensed and
+    early-supporter Macs never start a trial, never see it and never write its record. A revoked or damaged license
+    stays locked even with trial days left: the trial only covers "never activated". Activating during the trial
+    hides it (the dates stay, unused). The license itself (`LicenseState.isUnlocked`) is unchanged; the app's
+    `FeatureGate` unlocks features for the license *or* an active trial (`TrialAccess`).
+  - While it runs, the menu shows "Free trial: N days left" and Settings → License shows the days left, the key
+    field and *Buy license*. After it: the soft lock below, with *Buy license* (`https://cinenotch.cam/?ref=trial`)
+    and *Enter key* (opens the License tab) for a Mac that was never activated.
+  - Like the rest, it keeps honest people honest. Deleting both copies, or a rebuild from source, gets around it;
+    the Keychain plus the defaults is reasonably tamper-resistant, not DRM.
+- Unlicensed (licensing on, no activation, no trial left): the PiP window is not docked and stays an ordinary
   floating window (so the user's video is never taken away), the camera glance doesn't run (it only
   runs while a video is docked), a small "Activate CineNotch to dock this video" pill with *Enter Key*
   and *Buy* appears while a PiP video exists ("×" hides it until the next video), and the menu bar
-  menu shows the same with *Enter License Key…* and *Buy CineNotch…*. Settings and Quit always work.
+  menu shows the same with *Buy license* and *Enter key* after the trial (*Enter License Key…* and *Buy CineNotch…*
+  for a revoked or damaged license). Settings and Quit always work.
 - Sparkle updates, `/appcast.xml` and `/download` stay public. A license is not needed to update; the
   app checks the license itself.
 
 Code: `Sources/CineNotchLicense/` (no UI; unit-tested: token, device id, Keychain store, server client,
-state machine) and, in the app target, `Support/Licensing.swift` (setup from Info.plist), `Windows/LockPill.swift`,
+state machine, trial in `Trial.swift`) and, in the app target, `Support/Licensing.swift` (setup from Info.plist,
+`FeatureGate`), `Windows/LockPill.swift`,
 the License tab in `Windows/Settings.swift`, the locked menu in `StatusMenu.swift` and `PiPController.setLocked`.
 The gaze engine isn't touched.
 
@@ -188,10 +211,17 @@ Developer switches (`Support/LaunchOptions.swift`):
 | `--debug-license-public-key <base64>` | the key that checks tokens |
 | `--debug-license-state off\|unlicensed\|revoked\|licensed\|stale\|early` | pins the state: see the locked island, menu and License tab. No server, no Keychain |
 | `--debug-license-prior-install` | debug runs count as a new install; this makes one an early supporter (if nothing is decided yet) |
-| `--debug-license-reset` | forgets the debug activation and the debug early-supporter decision first (not the slot on the server) |
+| `--debug-license-reset` | forgets the debug activation, the debug early-supporter decision and the debug trial first (not the slot on the server) |
+| `--debug-trial-reset` | forgets the debug trial (`debug-activation.trial`, `CNDebugTrialStart` / `CNDebugTrialLastSeen`) first. Never the real one |
+| `--debug-trial-days-left <n>` | pins the trial for this run: n > 0 days left, 0 for ended. Writes nothing. A licensed or early state still wins |
 | `--debug-license-activate <key>` / `--debug-license-deactivate` | does it at launch, as the License tab would (debug Keychain only); the result is in the log |
 
-`--debug-license-state unlicensed --debug-fake-pip` shows the lock pill and the locked menu. Add
+Debug runs (`--debug-license-enabled`, `-server`, `-public-key`) keep their trial in `debug-activation.trial` and
+`CNDebugTrial*`, never the real record. With `--debug-license-state` the trial is in memory only (a fresh 7 days each
+run), like the license.
+
+`--debug-license-state unlicensed --debug-fake-pip` starts a trial (everything unlocked); add
+`--debug-trial-days-left 0` for the lock pill and the locked menu. Add
 `--debug-windows <dir>` for pictures of the Settings tabs and the lock pill (without Screen Recording permission the
 windows are drawn from their views, without the title bar).
 A debug-activated Mac holds a slot in the mock/test Creem: deactivate in the License tab afterwards.
@@ -207,5 +237,7 @@ A debug-activated Mac holds a slot in the mock/test Creem: deactivate in the Lic
   otherwise the slot is freed by hand in Creem's dashboard (or by writing to support).
 - **Refunds.** Creem disables the license on refund: the next check (≤ 14 days, plus hours) locks that Mac.
 - **Existing free users** keep it free for good, automatically (see *Early supporters* above). Decided 2026-10-27.
+- **Trial.** 7 days, from the first launch with licensing on, offline. Rolling the clock back pauses the count at
+  the last day seen rather than locking (no honest user is locked by a wrong clock). Decided 2026-11-27.
 - **Locked means not docked, not broken.** The user's video keeps playing in its normal PiP window.
 - **Token lifetime.** 730 days (or the license's own expiry if sooner). Past it the app only reminds.
