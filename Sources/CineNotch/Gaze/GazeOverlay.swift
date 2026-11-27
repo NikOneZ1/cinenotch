@@ -45,7 +45,7 @@ struct GazeSteps {
     var camera: GazeStep {
         GazeStep(target: .camera, point: CGPoint(x: frame.midX, y: frame.maxY - 46),
                  instruction: "Look into the camera lens above the screen",
-                 aim: CGPoint(x: 0.5, y: GazeMath.cameraY))
+                 aim: CGPoint(x: 0.5, y: island.metrics.cameraY))
     }
 
     var video: GazeStep { video(at: CGPoint(x: 0.5, y: 0.5)) }

@@ -1,4 +1,5 @@
 import AppKit
+import CineNotchGeometry
 import Combine
 import SwiftUI
 
@@ -81,7 +82,7 @@ final class IslandController: ObservableObject {
         self.options = options
         let videoSize = IslandVideoSize(rawValue: UserDefaults.standard.string(forKey: Self.videoSizeKey) ?? "") ?? .medium
         self.videoSize = videoSize
-        let metrics = IslandMetrics.current(debugNotch: options.debugNotch, videoSize: videoSize)
+        let metrics = IslandMetrics.current(forced: options.forcedLayout, videoSize: videoSize)
         self.metrics = metrics
         motion = IslandMotion(metrics: metrics)
         motion.aspect = pip.aspect
@@ -128,13 +129,16 @@ final class IslandController: ObservableObject {
             MainActor.assumeIsolated { self?.screenChanged() }
         }
 
+        // Only an island has Apple's island next to it. Cheap enough at twice a second.
+        addTimer(interval: 0.5) { [weak self] in self?.updateSystemIsland() }
+
         if options.debugCycle {
             addTimer(interval: 3 / motion.timeScale) { [weak self] in self?.debugCycle() }
         } else if !options.debugDemo {
             installMouseTracking()
             installScrollSeeking()
         }
-        Log.info("island started, metrics=\(metrics)")
+        Log.info("island started, metrics=\(metrics.summary)")
     }
 
     func attachGaze(_ gaze: GazeController) {
@@ -243,11 +247,70 @@ final class IslandController: ObservableObject {
     }
 
     private func screenChanged() {
-        metrics = IslandMetrics.current(debugNotch: options.debugNotch, videoSize: videoSize)
+        let fresh = IslandMetrics.current(forced: options.forcedLayout, videoSize: videoSize)
+        // Apple's expanded island may widen the auxiliary areas. That is not a new screen: keep
+        // the idle housing and yield to it instead of classifying the wider gap.
+        if fresh.screenFrame == metrics.screenFrame, auxiliarySystemIsland() != nil {
+            Log.info("screen changed around Apple's expanded island; keeping the idle housing")
+            updateSystemIsland()
+            return
+        }
+        metrics = fresh
         motion.metrics = metrics
         motion.snap(visible: isVisible, expanded: isExpanded)
         panel?.setFrame(metrics.panelFrame(), display: true)
-        Log.info("screen changed, metrics=\(metrics)")
+        Log.info("screen changed, metrics=\(metrics.summary)")
+    }
+
+    // MARK: Apple's island
+
+    /// Watches for Apple's island expanding next to ours (Spotlight, Live Activities, Siri, the
+    /// camera and microphone indicators) and moves the wings out beside it. Best effort with
+    /// public APIs only: the window list and the screen's auxiliary areas. Neither is known
+    /// to show Apple's island on PROLED hardware yet; the log says what was seen.
+    private func updateSystemIsland() {
+        guard metrics.isIsland, isVisible else { return }
+        let occupancy = SystemIslandDetector.merge(windowSystemIsland(), auxiliarySystemIsland())
+        func key(_ o: SystemIslandOccupancy?) -> [CGFloat]? { o.map { [$0.width.rounded(), $0.depth.rounded()] } }
+        guard key(occupancy) != key(metrics.systemIsland) else { return }
+        metrics.systemIsland = occupancy
+        motion.metrics = metrics
+        motion.relayout()
+        let panelFrame = metrics.panelFrame()
+        if panel?.frame != panelFrame { panel?.setFrame(panelFrame, display: true) }
+        if let occupancy {
+            Log.info("system island: \(occupancy.width)x\(occupancy.depth) from \(occupancy.source); "
+                     + "yielding, cutout=\(metrics.cutoutWidth) collapsedWidth=\(metrics.collapsedWidth)")
+        } else {
+            Log.info("system island: idle again, collapsedWidth=\(metrics.collapsedWidth)")
+        }
+    }
+
+    /// A window of another process in the top-center strip, wider than the camera pill.
+    private func windowSystemIsland() -> SystemIslandOccupancy? {
+        guard let primary = NSScreen.screens.first?.frame, let housing = metrics.housing else { return nil }
+        let frame = metrics.screenFrame
+        // The window list uses a top-left origin on the primary display.
+        let screen = CGRect(x: frame.minX, y: primary.maxY - frame.maxY, width: frame.width, height: frame.height)
+        let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        let windows = list.compactMap { info -> WindowSample? in
+            guard let dict = info[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: dict),
+                  let pid = info[kCGWindowOwnerPID as String] as? pid_t else { return nil }
+            return WindowSample(bounds: bounds, layer: info[kCGWindowLayer as String] as? Int ?? 0, ownerPID: pid,
+                                ownerName: info[kCGWindowOwnerName as String] as? String)
+        }
+        let strip = max(metrics.menuBarHeight, metrics.topGap + housing.height) + 1
+        return SystemIslandDetector.occupancy(windows: windows, screen: screen, strip: strip,
+                                              idleHousingWidth: housing.width, ownPID: getpid())
+    }
+
+    /// The auxiliary areas now leave a wider gap than the idle pill. Not with a forced layout:
+    /// a forced island on a notched Mac would read the real notch as Apple's island.
+    private func auxiliarySystemIsland() -> SystemIslandOccupancy? {
+        guard metrics.isIsland, options.forcedLayout == nil,
+              let screen = NSScreen.screens.first(where: { $0.frame == metrics.screenFrame }) else { return nil }
+        return SystemIslandDetector.occupancy(idle: metrics.geometry, current: ScreenMeasurements(screen))
     }
 
     /// The keyboard shortcut: opens the island and keeps it open, or closes it.

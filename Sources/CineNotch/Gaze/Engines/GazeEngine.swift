@@ -91,7 +91,9 @@ struct GazeTrainingReport: Sendable {
 
 /// Helpers shared by engine versions.
 enum GazeMath {
-    /// The lens sits just above the screen; in screen heights.
+    /// The lens sits just above the screen; in screen heights. This is the notch and no-cutout
+    /// value; `IslandMetrics.cameraY` moves it down for a camera island, where the lens sits
+    /// lower in the glass. Glance on PROLED hardware is untested.
     static let cameraY = -0.04
     static let cameraHalfWidth = 0.2
     static let islandMargin = 0.06

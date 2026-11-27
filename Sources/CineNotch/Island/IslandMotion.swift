@@ -97,7 +97,7 @@ final class IslandMotion: NSObject, ObservableObject {
     var aspect: CGFloat = 16.0 / 9.0
     /// Below 1 plays everything in slow motion (`--debug-slow-motion`).
     var timeScale = 1.0
-    /// The eyes sit inside a dot-sized island (no notch) while saying hello, not under it.
+    /// The eyes sit inside a dot-sized island (no camera housing) while saying hello, not under it.
     private(set) var eyesInside = false
 
     private var springs = Part.allCases.map { _ in MotionSpring(0) }
@@ -157,7 +157,7 @@ final class IslandMotion: NSObject, ObservableObject {
         publish()
     }
 
-    /// Picture in Picture started: the island grows out of the notch (or a dot), the mascot
+    /// Picture in Picture started: the island grows out of the notch or the camera island (or a dot), the mascot
     /// blinks hello, then the content fades in.
     func appear() {
         isVisible = true
@@ -170,7 +170,7 @@ final class IslandMotion: NSObject, ObservableObject {
         springs[Part.height.rawValue].jump(start.height)
         springs[Part.topRadius.rawValue].jump(layout.topRadius)
         springs[Part.bottomRadius.rawValue].jump(start.bottomRadius)
-        springs[Part.opacity.rawValue].jump(metrics.hasNotch ? 1 : 0)
+        springs[Part.opacity.rawValue].jump(metrics.growsFromHousing ? 1 : 0)
         set(.opacity, 1, Curve(response: 0.2, damping: 1))
         springs[Part.content.rawValue].jump(0)
         controls(expanded: false, instant: true)
@@ -199,7 +199,7 @@ final class IslandMotion: NSObject, ObservableObject {
         set(.width, end.width, Curve(response: 0.34, damping: 0.95, delay: 0.08))
         set(.height, end.height, Curve(response: 0.3, damping: 1))
         set(.bottomRadius, end.bottomRadius, Curve(response: 0.3, damping: 1, delay: 0.08))
-        set(.opacity, 0, Curve(response: 0.2, damping: 1, delay: metrics.hasNotch ? 0.55 : 0.34))
+        set(.opacity, 0, Curve(response: 0.2, damping: 1, delay: metrics.growsFromHousing ? 0.55 : 0.34))
         wake()
     }
 
@@ -275,10 +275,10 @@ final class IslandMotion: NSObject, ObservableObject {
 
     private func hello(now: TimeInterval) {
         eyesOwner = .hello
-        eyesInside = !metrics.hasNotch
+        eyesInside = !metrics.growsFromHousing
         springs[Part.eyes.rawValue].jump(0)
         springs[Part.bump.rawValue].jump(0)
-        if metrics.hasNotch {
+        if metrics.growsFromHousing {
             set(.bump, Double(Self.bumpDepth), Curve(response: 0.28, damping: 0.68, delay: 0.05))
         } else {
             set(.width, 64, Curve(response: 0.32, damping: 0.7))
@@ -351,8 +351,10 @@ final class IslandMotion: NSObject, ObservableObject {
 
     /// The island's size at the start of `appear` and the end of `disappear`.
     private func collapsedSeed() -> (width: Double, height: Double, bottomRadius: Double) {
-        if let notch = metrics.notch {
-            return (Double(notch.width), Double(metrics.pillHeight), 10)
+        if let housing = metrics.housing {
+            // An island starts as the capsule around the camera; a notch as the notch.
+            let bottom = metrics.isIsland ? Double(metrics.pillHeight) / 2 : 10
+            return (Double(housing.width), Double(metrics.pillHeight), bottom)
         }
         return (22, Double(metrics.pillHeight), Double(metrics.pillHeight) / 2)
     }

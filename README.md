@@ -199,6 +199,7 @@ engine test, and the logs folder.
 ./scripts/run.sh --debug-fake-pip                 # a drawn video instead of Safari's, no PiP needed
 ./scripts/run.sh --debug-slow-motion              # island animations at a fifth of their speed
 ./scripts/run.sh --debug-notch                    # notch layout on a Mac without a notch
+./scripts/run.sh --debug-layout island           # force a layout: notch, island (synthetic camera pill) or none
 ./scripts/run.sh --debug-cycle                    # expand/collapse every 3 s, no mouse needed
 ./scripts/run.sh --debug-snapshots /tmp/cinenotch  # save screenshots around every state change
 ./scripts/run.sh --debug-island-png /tmp/island   # pictures of the island window alone (timed frames with slow motion)
@@ -210,7 +211,8 @@ engine test, and the logs folder.
 
 The app icon is drawn by `swift scripts/make-icon.swift`, which writes `Resources/AppIcon.icns`.
 
-Logs: `~/Library/Logs/CineNotch.log`. While the gaze debug panel is open, every analyzed frame
+Logs: `~/Library/Logs/CineNotch.log`. At launch and on every screen change it lists each screen's
+frame, safe area, auxiliary areas and the cutout picked for it (notch, island or none). While the gaze debug panel is open, every analyzed frame
 goes to `~/Library/Logs/CineNotch-gaze.csv`. Calibration samples are kept in
 `~/Library/Application Support/CineNotch/gaze-calibration.json`.
 
