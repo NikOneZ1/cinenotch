@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let gaze = GazeController()
     private let updates = Updates()
     private lazy var license = Licensing.makeManager(options: options)
+    /// The license, or an active 7-day trial on a Mac that was never activated: what the core features go by.
+    private lazy var gate = FeatureGate(license: license, trial: Licensing.makeTrialManager(options: options, license: license))
     private let loginItem = LoginItem()
     private var hotKeys: HotKeys?
     private var island: IslandController?
@@ -68,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.hotKeys = hotKeys
         let settings = SettingsWindow(gaze: gaze, island: island, collapsePause: collapsePause, awayPause: awayPause,
                                       onlookerHide: onlookerHide, loginItem: loginItem, hotKeys: hotKeys, updates: updates, license: license,
-                                      calibrate: { calibrator.start() })
+                                      gate: self.gate, calibrate: { calibrator.start() })
         self.settings = settings
         let onboarding = Onboarding()
         onboarding.onPermissionsGranted = { [weak self] in self?.startEngine() }
@@ -80,19 +82,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.onboarding = onboarding
 
         // Licensing: off in every build until Info.plist says otherwise, and then nothing in this block does anything.
+        // The gate is made before `license.start()`, so it sees the first real license state and can start the trial.
         let license = self.license
-        pip.setLocked(!license.isUnlocked)
-        license.$state
-            .map { !$0.isUnlocked }
+        let gate = self.gate
+        pip.setLocked(!gate.isUnlocked)
+        gate.$isUnlocked
+            .map { !$0 }
             .removeDuplicates()
             .sink { [pip] locked in pip.setLocked(locked) }
             .store(in: &cancellables)
         if license.isEnforced {
-            lockPill = LockPill(license: license, pip: pip,
+            lockPill = LockPill(gate: gate, pip: pip,
                                 enterKey: { settings.show(.license) },
-                                buy: { Licensing.open(license.configuration.buyURL) })
+                                buy: { Licensing.open(gate.buyURL) })
         }
         license.start()
+        gate.noteLicenseReady()
         if license.configuration.storeAccount == "debug-activation", options.debugLicenseActivate != nil || options.debugLicenseDeactivate {
             Task { [options] in
                 if let key = options.debugLicenseActivate { await license.activate(key: key) }
@@ -110,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         statusMenu = StatusMenu(pip: pip, gaze: gaze, island: island, collapsePause: collapsePause, awayPause: awayPause,
-                                onlookerHide: onlookerHide, updates: updates, license: license,
+                                onlookerHide: onlookerHide, updates: updates, gate: gate,
                                 thumbnail: { [weak island] in island?.thumbnail() },
                                 showPermissions: { onboarding.show(.permissions) },
                                 showSettings: { settings.show() },

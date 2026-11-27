@@ -120,6 +120,10 @@ public final class LicenseManager: ObservableObject {
     /// What gates the app's core features.
     public var isUnlocked: Bool { state.isUnlocked }
 
+    /// Whether `state` is a decision (the Keychain was read, or the state is pinned) rather than the locked placeholder
+    /// shown until then. The trial waits for this, so a licensed Mac never starts one.
+    public var isStateKnown: Bool { fixedState != nil || loaded }
+
     // MARK: Lifecycle
 
     /// Reads what's stored, checks it offline, and schedules the soft re-validation.

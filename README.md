@@ -59,7 +59,7 @@ Status: early. Safari and Chrome, one screen.
 **[Download CineNotch](https://github.com/NikOneZ1/cinenotch/releases/latest/download/CineNotch.dmg)**
 for macOS 14 or later, Apple silicon and Intel. It's also on [cinenotch.cam](https://cinenotch.cam).
 The app is signed with Developer ID and notarized by Apple: open the disk image and drag
-CineNotch to Applications. To unlock it, **[buy a license at cinenotch.cam](https://cinenotch.cam/#pricing)**
+CineNotch to Applications. Everything works free for 7 days. To keep it, **[buy a license at cinenotch.cam](https://cinenotch.cam/#pricing)**
 ($14.99 once) and paste the key from your email in Settings → License. Used CineNotch before 1.0?
 It stays free for you, updates included: nothing to do.
 From 0.2.0 on it updates itself with [Sparkle](https://sparkle-project.org): once a day it checks
@@ -240,8 +240,8 @@ goes to `~/Library/Logs/CineNotch-gaze.csv`. Calibration samples are kept in
 ## Pricing
 
 CineNotch is a $14.99 one-time purchase, with no subscription. You get the signed, notarized app
-that updates itself; one license covers up to 3 of your Macs and every 1.x update. There's a 30-day
-money-back guarantee instead of a free trial. Payments go through [Creem](https://creem.io), which
+that updates itself; one license covers up to 3 of your Macs and every 1.x update. Try it free for
+7 days first, and there's a 30-day money-back guarantee too. Payments go through [Creem](https://creem.io), which
 emails you the license key. Everyone who used CineNotch before 1.0 keeps it free.
 
 ### Why is it paid?
