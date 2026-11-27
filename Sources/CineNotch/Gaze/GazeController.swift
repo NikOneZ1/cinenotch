@@ -76,6 +76,8 @@ final class GazeController: ObservableObject {
     var islandRect: () -> CGRect = { CGRect(x: 0.3, y: 0, width: 0.4, height: 0.45) }
     /// The screen gaze is measured on (the island's), in screen coordinates.
     var screenFrame: () -> CGRect = { NSScreen.main?.frame ?? .zero }
+    /// Where the lens is, screen-normalized (y down): `GazeMath.cameraY` unless the island's screen says otherwise.
+    var cameraY: () -> Double = { GazeMath.cameraY }
 
     let camera = CameraFeed()
 

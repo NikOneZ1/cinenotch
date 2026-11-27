@@ -133,7 +133,7 @@ private struct GazeMap: View {
                 let cameraZone = rect(CGRect(x: 0.5 - GazeMath.cameraHalfWidth, y: top,
                                              width: 2 * GazeMath.cameraHalfWidth, height: cameraMaxY - top))
                 context.fill(Path(cameraZone), with: .color(.green.opacity(active?.zone == .camera ? 0.45 : 0.18)))
-                let lens = point(CGPoint(x: 0.5, y: GazeMath.cameraY))
+                let lens = point(CGPoint(x: 0.5, y: gaze.cameraY()))
                 context.fill(Path(ellipseIn: CGRect(x: lens.x - 3, y: lens.y - 3, width: 6, height: 6)), with: .color(.green))
 
                 let island = rect(gaze.islandRect().insetBy(dx: -GazeMath.islandMargin, dy: -GazeMath.islandMargin))

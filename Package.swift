@@ -16,7 +16,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "CineNotch",
-            dependencies: [.product(name: "Sparkle", package: "Sparkle"), "CineNotchLicense"],
+            dependencies: [.product(name: "Sparkle", package: "Sparkle"), "CineNotchLicense", "CineNotchGeometry"],
             path: "Sources/CineNotch"
         ),
         // License keys: token check, Keychain storage, the client for cinenotch.cam's licensing proxy. Off unless
@@ -29,6 +29,17 @@ let package = Package(
             name: "CineNotchLicenseTests",
             dependencies: ["CineNotchLicense"],
             path: "Tests/CineNotchLicenseTests"
+        ),
+        // Camera cutout classification (notch, camera island, none) from screen measurements. Foundation only, so it
+        // can be tested without AppKit.
+        .target(
+            name: "CineNotchGeometry",
+            path: "Sources/CineNotchGeometry"
+        ),
+        .testTarget(
+            name: "CineNotchGeometryTests",
+            dependencies: ["CineNotchGeometry"],
+            path: "Tests/CineNotchGeometryTests"
         ),
         .target(
             name: "NowPlayingBridge",

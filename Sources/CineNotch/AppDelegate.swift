@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !options.debugDemo { island.attachGaze(gaze) }
         gaze.islandRect = { [weak island] in island?.expandedRectNormalized() ?? .zero }
         gaze.screenFrame = { [weak island] in island?.metrics.screenFrame ?? .zero }
+        gaze.cameraY = { [weak island] in island?.metrics.cameraY ?? GazeMath.cameraY }
         self.island = island
         let calibrator = GazeCalibrator(gaze: gaze, island: island)
         self.calibrator = calibrator

@@ -1,9 +1,15 @@
+import CineNotchGeometry
 import Foundation
 
 /// Developer switches, passed as launch arguments (`open CineNotch.app --args --debug-notch`).
 struct LaunchOptions {
-    /// Pretend the screen has a notch, to work on the notch layout on any Mac.
+    /// Pretend the screen has a notch, to work on the notch layout on any Mac. Same as `--debug-layout notch`.
     var debugNotch = false
+    /// `--debug-layout <notch|island|none>`: use this layout whatever the screen reports. "island" on a Mac without
+    /// one uses a synthetic pill and top gap from the menu bar strip (see `CutoutClassifier.forced`).
+    var debugLayout: CutoutKind?
+    /// The layout to force, if any: `--debug-layout` wins over `--debug-notch`.
+    var forcedLayout: CutoutKind? { debugLayout ?? (debugNotch ? .notch : nil) }
     /// Expand and collapse the island on a timer instead of following the mouse.
     var debugCycle = false
     /// Save screenshots of the island around every state change into this directory.
@@ -53,6 +59,8 @@ struct LaunchOptions {
         while let arg = args.next() {
             switch arg {
             case "--debug-notch": options.debugNotch = true
+            case "--debug-layout":
+                if let name = args.next() { options.debugLayout = CutoutKind(rawValue: name) }
             case "--debug-cycle": options.debugCycle = true
             case "--debug-gaze": options.debugGaze = true
             case "--evaluate-gaze": options.evaluateGaze = true
